@@ -1,0 +1,49 @@
+MIT License with Attribution Requirement
+
+Copyright (c) 2024 Gaurav Gupta
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+1. The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+2. **ATTRIBUTION REQUIREMENT**: Any distribution, modification, or derivative work
+   of this Software must prominently display the following attribution:
+   
+   "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
+   
+   This attribution must be included in:
+   - All source code files that are modified or derived from this Software
+   - Documentation files
+   - User interfaces or command-line help text
+   - README files or project descriptions
+   - Any other materials that describe or present the Software
+
+3. The Software is provided "as is", without warranty of any kind, express or
+   implied, including but not limited to the warranties of merchantability,
+   fitness for a particular purpose and noninfringement. In no event shall the
+   authors or copyright holders be liable for any claim, damages or other
+   liability, whether in an action of contract, tort or otherwise, arising from,
+   out of or in connection with the Software or the use or other dealings in the
+   Software.
+
+4. If you use this Software in a commercial product or service, you must:
+   - Include the attribution requirement in your product documentation
+   - Provide a link to the original project in your product's about section
+   - Notify users of the original authorship in any relevant user interfaces
+
+5. Failure to comply with the attribution requirement constitutes a breach of
+   this license and may result in legal action.
+
+For questions about this license or attribution requirements, please contact:
+Gaurav Gupta - gauravgupta@example.com
+
+---
+
+This license is based on the MIT License but adds a mandatory attribution requirement
+to ensure that the original developer receives proper credit for their work. 
