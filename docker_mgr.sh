@@ -13,6 +13,9 @@
 
 set -euo pipefail
 
+# Set up cleanup trap for animation
+trap cleanup_animation EXIT INT TERM
+
 # Script information
 SCRIPT_NAME="docker_mgr.sh"
 SCRIPT_VERSION="1.0.0"
@@ -51,9 +54,9 @@ TRACE_ENABLED=false
 # Usage: Called automatically during script startup
 # =============================================================================
 initialize_system() {
-    print_header "Docker Ops Manager v$SCRIPT_VERSION"
-    print_info "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)"
-    print_info "Licensed under MIT License with Attribution Requirement"
+    # print_header "Docker Ops Manager v$SCRIPT_VERSION"
+    # print_info "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
+    # print_info "Licensed under MIT License with Attribution Requirement"
     
     # Load configuration
     load_config
@@ -862,8 +865,8 @@ print_help() {
     echo "Examples:"
     echo "  ./docker_ops_manager.sh generate docker-compose.yml my-app"
     echo "  ./docker_ops_manager.sh generate app1.yml app2.yml app3.yml"
-    echo "  ./docker_ops_manager.sh start my-app"
-    echo "  ./docker_ops_manager.sh start nginx-app web-app db-app"
+    # echo "  ./docker_ops_manager.sh start my-app"
+    # echo "  ./docker_ops_manager.sh start nginx-app web-app db-app"
     echo "  ./docker_ops_manager.sh stop"
     echo "  ./docker_ops_manager.sh stop nginx-app web-app"
     echo "  ./docker_ops_manager.sh cleanup nginx"
@@ -878,19 +881,19 @@ print_help() {
     echo "  ./docker_ops_manager.sh list images"
     echo "  ./docker_ops_manager.sh list projects"
     echo "  ./docker_ops_manager.sh env"
-    echo
-    echo "Environment Variables:"
-    echo "  DOCKER_OPS_CONFIG_DIR                  Configuration directory"
-    echo "  DOCKER_OPS_LOG_DIR                     Log directory"
-    echo "  DOCKER_OPS_LOG_LEVEL                   Log level"
-    echo "  DOCKER_OPS_STATE_FILE                  State file path"
-    echo
-    echo "Cleanup Options:"
-    echo "  ./docker_ops_manager.sh cleanup nginx        # Remove specific container"
-    echo "  ./docker_ops_manager.sh cleanup --all        # Remove all state-managed containers only"
-    echo "  ./docker_ops_manager.sh cleanup all          # Remove ALL containers, images, volumes, networks (DANGER)"
-    echo "  ./docker_ops_manager.sh nuke                 # Interactive nuke with confirmation prompt"
-    echo
+    # echo
+    # echo "Environment Variables:"
+    # echo "  DOCKER_OPS_CONFIG_DIR                  Configuration directory"
+    # echo "  DOCKER_OPS_LOG_DIR                     Log directory"
+    # echo "  DOCKER_OPS_LOG_LEVEL                   Log level"
+    # echo "  DOCKER_OPS_STATE_FILE                  State file path"
+    # echo
+    # echo "Cleanup Options:"
+    # echo "  ./docker_ops_manager.sh cleanup nginx        # Remove specific container"
+    # echo "  ./docker_ops_manager.sh cleanup --all        # Remove all state-managed containers only"
+    # echo "  ./docker_ops_manager.sh cleanup all          # Remove ALL containers, images, volumes, networks (DANGER)"
+    # echo "  ./docker_ops_manager.sh nuke                 # Interactive nuke with confirmation prompt"
+    # echo
     echo "For more information, see the documentation."
     echo
     echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
