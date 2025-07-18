@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  test-app:
+    image: nginx:alpine
+    container_name: test-no-healthcheck
+    ports:
+      - "8081:80"
+    restart: unless-stopped
+    # No healthcheck defined intentionally for testing 

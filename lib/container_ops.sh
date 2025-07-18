@@ -837,6 +837,15 @@ get_container_readiness_timeout() {
 # Waits for a container to reach a ready state before considering the operation complete.
 # Supports health checks and configurable timeouts.
 #
+# Algorithm:
+# 1. Container creation starts
+# 2. Check for health check response, max wait time is timeout
+# 3. Show waiting dots animation during the entire timeout period
+# 4. Number of dots is 1/4 of the timeout value
+# 5. If health check responds with "healthy" within timeout, stop animation and return success
+# 6. If no health check response within timeout, check if container is running
+# 7. Show appropriate message based on container status
+#
 # Timeout is determined in the following order:
 #   1. Per-container override (YAML: x-docker-ops.readiness_timeout)
 #   2. CLI flag (--timeout)
@@ -881,7 +890,15 @@ wait_for_container_ready() {
         timeout=60
     fi
 
-    log_operation_start "$operation" "$container_name" "Waiting for container to be ready (timeout: ${timeout}s)"
+    # Calculate dots based on timeout (1/4 of timeout value)
+    local dots_count=$((timeout / 4))
+    if [[ $dots_count -lt 3 ]]; then
+        dots_count=3  # Minimum 3 dots
+    elif [[ $dots_count -gt 10 ]]; then
+        dots_count=10  # Maximum 10 dots
+    fi
+
+    log_operation_start "$operation" "$container_name" "Waiting for container to be ready (timeout: ${timeout}s, dots: ${dots_count})"
 
     local start_time=$(date +%s)
     local end_time=$((start_time + timeout))
@@ -889,40 +906,68 @@ wait_for_container_ready() {
     # Show waiting animation
     print_info "Waiting for container '$container_name' to be ready (timeout: ${timeout}s)"
 
-    # Poll the container status until ready or timeout
+    # Start signal-based animation with calculated dots
+    start_signal_animation "$dots_count"
+
+    # Poll for health check response until timeout
+    local health_responded=false
+    local health_status=""
+    
     while [[ $(date +%s) -lt $end_time ]]; do
-            # Show static waiting message with animating dots
-        show_waiting_dots $((timeout/2))
-        
-        local is_running=$(container_is_running "$container_name" && echo "true" || echo "false")
-        local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
-        
-        log_debug "$operation" "$service_name" "Status check for $container_name: running=$is_running, health=$health_status"
-        
-        if [[ "$is_running" == "true" ]]; then
-            # Check if container is healthy (if health check is configured)
-            if [[ "$health_status" == "healthy" ]]; then
-                log_operation_success "$operation" "$container_name" "Container is healthy and ready"
-                return 0
-            elif [[ "$health_status" == "<nil>" ]]; then
-                # No healthcheck defined, just check running
-                log_operation_success "$operation" "$container_name" "Container is running (no healthcheck)"
-                return 0
-            elif [[ "$health_status" == "starting" ]]; then
-                log_debug "$operation" "$container_name" "Healthcheck is starting, waiting..."
-            elif [[ "$health_status" == "unhealthy" ]]; then
-                log_debug "$operation" "$container_name" "Healthcheck reports unhealthy, waiting..."
+        # Try to get health status, but handle containers without health checks gracefully
+        if docker inspect --format='{{.State.Health.Status}}' "$container_name" >/dev/null 2>&1; then
+            health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
+            
+            # Check if we got a valid health response (not <nil>)
+            if [[ -n "$health_status" && "$health_status" != "<nil>" ]]; then
+                health_responded=true
+                log_debug "$operation" "$service_name" "Health check responded: $health_status"
+                
+                # If healthy, stop animation and return success
+                if [[ "$health_status" == "healthy" ]]; then
+                    stop_signal_animation
+                    log_operation_success "$operation" "$container_name" "Container is healthy and ready"
+                    return 0
+                elif [[ "$health_status" == "unhealthy" ]]; then
+                    log_debug "$operation" "$container_name" "Healthcheck reports unhealthy, continuing to wait..."
+                elif [[ "$health_status" == "starting" ]]; then
+                    log_debug "$operation" "$container_name" "Healthcheck is starting, continuing to wait..."
+                else
+                    log_debug "$operation" "$container_name" "Unknown health status: $health_status, continuing to wait..."
+                fi
             else
-                log_debug "$operation" "$container_name" "Unknown health status: $health_status, waiting..."
+                log_debug "$operation" "$service_name" "No health check configured or health status is <nil>"
             fi
         else
-            log_debug "$operation" "$container_name" "Container not running yet, waiting..."
+            log_debug "$operation" "$service_name" "Health check not available for container"
         fi
-        # Wait 1 second before next check
-        sleep 0.8
         
+        # Small sleep to prevent busy waiting
+        sleep 1
     done
 
-    log_operation_failure "$operation" "$container_name" "Container not ready within timeout (${timeout}s)"
-    return 1
+    # Timeout reached - stop animation
+    stop_signal_animation
+
+    # After timeout, check if container is running and show appropriate message
+    local is_running=$(container_is_running "$container_name" && echo "true" || echo "false")
+    
+    if [[ "$is_running" == "true" ]]; then
+        if [[ "$health_responded" == "true" ]]; then
+            # Health check responded but didn't become healthy within timeout
+            log_operation_failure "$operation" "$container_name" "Container is running but health check did not become healthy within timeout (${timeout}s)"
+            print_warning "Container '$container_name' is running but health check did not become healthy within timeout (${timeout}s)"
+            return 1
+        else
+            # No health check configured, container is running
+            log_operation_success "$operation" "$container_name" "Container is ready, but no provision for health check!!! 🐳✨"
+            print_success "Container '$container_name' is ready, but no provision for health check!!! 🐳✨"
+            return 0
+        fi
+    else
+        # Container is not running
+        log_operation_failure "$operation" "$container_name" "Container not ready within timeout (${timeout}s)"
+        print_error "Container '$container_name' is not running after timeout (${timeout}s)"
+        return 1
+    fi
 } 
