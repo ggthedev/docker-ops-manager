@@ -86,6 +86,7 @@ docker-ops-manager/
 | `list [resource_type]` | List Docker resources | `./docker_mgr.sh list containers` |
 | `config` | Show configuration | `./docker_mgr.sh config` |
 | `state` | Show state summary | `./docker_mgr.sh state` |
+| `env` | Show environment variables and directory locations | `./docker_mgr.sh env` |
 | `help` | Show help | `./docker_mgr.sh help` |
 
 ### Options
@@ -211,6 +212,9 @@ docker-ops-manager/
 
 # Show state information
 ./docker_mgr.sh state
+
+# Show environment information
+./docker_mgr.sh env
 
 # Show help
 ./docker_mgr.sh help
@@ -394,6 +398,28 @@ The Docker Ops Manager supports operations on multiple containers simultaneously
 - **table**: Formatted table output (default)
 - **json**: JSON format for programmatic use
 - **custom**: Custom formatted output
+
+## Environment Information
+
+The `env` command provides comprehensive information about the Docker Ops Manager environment:
+
+### What it shows:
+- **Directory Locations**: Configuration, logs, state file, config file, and temp directory paths
+- **Environment Variables**: All Docker Ops Manager environment variables with their current values
+- **Current Values**: Resolved values including defaults for unset variables
+- **Directory Status**: Whether directories exist (✓) or don't exist (✗)
+- **File Status**: Whether key files exist (✓) or don't exist (✗)
+
+### Example output:
+```bash
+./docker_mgr.sh env
+```
+
+This command is useful for:
+- Debugging configuration issues
+- Understanding where files are stored
+- Verifying environment variable settings
+- Checking if required directories and files exist
 
 ## Error Handling
 

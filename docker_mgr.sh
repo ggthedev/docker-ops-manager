@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # Script information
-SCRIPT_NAME="docker_ops_manager.sh"
+SCRIPT_NAME="docker_mgr.sh"
 SCRIPT_VERSION="1.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -200,7 +200,7 @@ parse_arguments() {
 validate_operation() {
     local valid_operations=(
         "generate" "install" "reinstall" "start" "run" "stop" "restart"
-        "cleanup" "nuke" "status" "logs" "list" "config" "state" "help"
+        "cleanup" "nuke" "status" "logs" "list" "config" "state" "env" "help"
     )
     
     for op in "${valid_operations[@]}"; do
@@ -323,6 +323,9 @@ route_operation() {
             ;;
         "state")
             handle_state
+            ;;
+        "env")
+            handle_env
             ;;
         "help")
             print_help
@@ -726,6 +729,98 @@ handle_state() {
 }
 
 # =============================================================================
+# FUNCTION: handle_env
+# =============================================================================
+# Purpose: Handle the env operation to show environment information
+# Inputs: None
+# Outputs: None
+# Side Effects: Displays environment variables and directory locations
+# Usage: Called by route_operation when operation is "env"
+# =============================================================================
+handle_env() {
+    print_section "Environment Information"
+    
+    # Get configuration values
+    local config_dir="${DOCKER_OPS_CONFIG_DIR:-~/.config/docker-ops-manager}"
+    local log_dir="${DOCKER_OPS_LOG_DIR:-~/.config/docker-ops-manager/logs}"
+    local state_file="${DOCKER_OPS_STATE_FILE:-~/.config/docker-ops-manager/state.json}"
+    local config_file="${DOCKER_OPS_CONFIG_FILE:-~/.config/docker-ops-manager/config.json}"
+    local max_history="${DOCKER_OPS_MAX_CONTAINER_HISTORY:-10}"
+    local project_pattern="${DOCKER_OPS_PROJECT_NAME_PATTERN:-project-<service.name>-<DD-MM-YY>}"
+    
+    # Expand tilde to home directory
+    config_dir=$(eval echo "$config_dir")
+    log_dir=$(eval echo "$log_dir")
+    state_file=$(eval echo "$state_file")
+    config_file=$(eval echo "$config_file")
+    
+    # Get temp directory for docker-compose files
+    local temp_dir="/tmp/docker-ops-manager"
+    
+    echo "Directory Locations:"
+    echo "  Configuration Directory: $config_dir"
+    echo "  Log Directory:          $log_dir"
+    echo "  State File:             $state_file"
+    echo "  Config File:            $config_file"
+    echo "  Temp Directory:         $temp_dir"
+    echo ""
+    
+    echo "Environment Variables:"
+    echo "  DOCKER_OPS_CONFIG_DIR:              ${DOCKER_OPS_CONFIG_DIR:-<not set>}"
+    echo "  DOCKER_OPS_LOG_DIR:                 ${DOCKER_OPS_LOG_DIR:-<not set>}"
+    echo "  DOCKER_OPS_LOG_LEVEL:               ${DOCKER_OPS_LOG_LEVEL:-<not set>}"
+    echo "  DOCKER_OPS_STATE_FILE:              ${DOCKER_OPS_STATE_FILE:-<not set>}"
+    echo "  DOCKER_OPS_CONFIG_FILE:             ${DOCKER_OPS_CONFIG_FILE:-<not set>}"
+    echo "  DOCKER_OPS_MAX_CONTAINER_HISTORY:   ${DOCKER_OPS_MAX_CONTAINER_HISTORY:-<not set>}"
+    echo "  DOCKER_OPS_PROJECT_NAME_PATTERN:    ${DOCKER_OPS_PROJECT_NAME_PATTERN:-<not set>}"
+    echo ""
+    
+    echo "Current Values (with defaults):"
+    echo "  Configuration Directory: $config_dir"
+    echo "  Log Directory:          $log_dir"
+    echo "  State File:             $state_file"
+    echo "  Config File:            $config_file"
+    echo "  Max Container History:  $max_history"
+    echo "  Project Name Pattern:   $project_pattern"
+    echo ""
+    
+    # Check if directories exist
+    echo "Directory Status:"
+    if [[ -d "$config_dir" ]]; then
+        echo "  ✓ Configuration Directory exists"
+    else
+        echo "  ✗ Configuration Directory does not exist"
+    fi
+    
+    if [[ -d "$log_dir" ]]; then
+        echo "  ✓ Log Directory exists"
+    else
+        echo "  ✗ Log Directory does not exist"
+    fi
+    
+    if [[ -d "$temp_dir" ]]; then
+        echo "  ✓ Temp Directory exists"
+    else
+        echo "  ✗ Temp Directory does not exist"
+    fi
+    
+    # Check if files exist
+    echo ""
+    echo "File Status:"
+    if [[ -f "$state_file" ]]; then
+        echo "  ✓ State File exists"
+    else
+        echo "  ✗ State File does not exist"
+    fi
+    
+    if [[ -f "$config_file" ]]; then
+        echo "  ✓ Config File exists"
+    else
+        echo "  ✗ Config File does not exist"
+    fi
+}
+
+# =============================================================================
 # FUNCTION: print_help
 # =============================================================================
 # Purpose: Display comprehensive help information for the Docker Ops Manager
@@ -754,6 +849,7 @@ print_help() {
     echo "  list [resource_type]                    List Docker resources (containers, images, projects, volumes, networks, all)"
     echo "  config                                  Show configuration"
     echo "  state                                   Show state summary"
+    echo "  env                                     Show environment variables and directory locations"
     echo "  help                                    Show this help"
     echo
     echo "Options:"
@@ -781,6 +877,7 @@ print_help() {
     echo "  ./docker_ops_manager.sh list containers"
     echo "  ./docker_ops_manager.sh list images"
     echo "  ./docker_ops_manager.sh list projects"
+    echo "  ./docker_ops_manager.sh env"
     echo
     echo "Environment Variables:"
     echo "  DOCKER_OPS_CONFIG_DIR                  Configuration directory"
@@ -796,7 +893,7 @@ print_help() {
     echo
     echo "For more information, see the documentation."
     echo
-    echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)"
+    echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
     echo "Licensed under MIT License with Attribution Requirement"
     echo "Copyright (c) 2024 Gaurav Gupta"
 }
