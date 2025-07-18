@@ -115,7 +115,7 @@ parse_arguments() {
                 ;;
             --version|-v)
                 echo "Docker Ops Manager v$SCRIPT_VERSION"
-                echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)"
+                echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
                 echo "Licensed under MIT License with Attribution Requirement"
                 echo "Copyright (c) 2024 Gaurav Gupta"
                 exit 0
