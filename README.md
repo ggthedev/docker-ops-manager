@@ -2,6 +2,10 @@
 
 A comprehensive, modular Docker operations management tool designed for ease of use, maintainability, and extensibility.
 
+**Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)**  
+**Licensed under MIT License with Attribution Requirement**  
+**Copyright (c) 2024 Gaurav Gupta**
+
 ## Features
 
 - **Modular Design**: Clean separation of concerns with dedicated modules for each operation
@@ -22,7 +26,7 @@ The Docker Ops Manager follows a modular design pattern with the following struc
 
 ```
 docker-ops-manager/
-├── docker_ops_manager.sh          # Main entry point
+├── docker_mgr.sh          # Main entry point
 ├── lib/                           # Core library modules
 │   ├── config.sh                  # Configuration management
 │   ├── logging.sh                 # Logging system
@@ -49,7 +53,7 @@ docker-ops-manager/
 1. Clone or download the project
 2. Make the main script executable:
    ```bash
-   chmod +x docker_ops_manager.sh
+   chmod +x docker_mgr.sh
    ```
 3. Ensure you have the required dependencies:
    - Docker
@@ -61,28 +65,28 @@ docker-ops-manager/
 ### Basic Syntax
 
 ```bash
-./docker_ops_manager.sh [OPERATION] [OPTIONS] [CONTAINER_NAME] [CONTAINER2...]
+./docker_mgr.sh [OPERATION] [OPTIONS] [CONTAINER_NAME] [CONTAINER2...]
 ```
 
 ### Operations
 
 | Operation | Description | Example |
 |-----------|-------------|---------|
-| `generate <yaml_file> [yaml_file2...] [container_name]` | Generate containers from YAML | `./docker_ops_manager.sh generate docker-compose.yml my-app` |
-| `install [container_name] [container2...]` | Install/update containers | `./docker_ops_manager.sh install my-app` |
-| `reinstall [container_name] [container2...]` | Reinstall containers | `./docker_ops_manager.sh reinstall my-app` |
-| `start\|run [container_name] [container2...]` | Start containers | `./docker_ops_manager.sh start my-app` |
-| `stop [container_name] [container2...]` | Stop containers | `./docker_ops_manager.sh stop my-app` |
-| `restart [container_name] [container2...]` | Restart containers | `./docker_ops_manager.sh restart my-app` |
-| `cleanup [container_name] [container2...] [--all]` | Remove specific containers or all state-managed containers | `./docker_ops_manager.sh cleanup --all` |
-| `cleanup all` | Remove ALL containers, images, volumes, networks (DANGER) | `./docker_ops_manager.sh cleanup all` |
-| `nuke` | Interactive nuke with confirmation prompt | `./docker_ops_manager.sh nuke` |
-| `status [container_name] [container2...]` | Show container status | `./docker_ops_manager.sh status my-app` |
-| `logs [container_name] [container2...]` | Show container logs | `./docker_ops_manager.sh logs my-app` |
-| `list [resource_type]` | List Docker resources | `./docker_ops_manager.sh list containers` |
-| `config` | Show configuration | `./docker_ops_manager.sh config` |
-| `state` | Show state summary | `./docker_ops_manager.sh state` |
-| `help` | Show help | `./docker_ops_manager.sh help` |
+| `generate <yaml_file> [yaml_file2...] [container_name]` | Generate containers from YAML | `./docker_mgr.sh generate docker-compose.yml my-app` |
+| `install [container_name] [container2...]` | Install/update containers | `./docker_mgr.sh install my-app` |
+| `reinstall [container_name] [container2...]` | Reinstall containers | `./docker_mgr.sh reinstall my-app` |
+| `start\|run [container_name] [container2...]` | Start containers | `./docker_mgr.sh start my-app` |
+| `stop [container_name] [container2...]` | Stop containers | `./docker_mgr.sh stop my-app` |
+| `restart [container_name] [container2...]` | Restart containers | `./docker_mgr.sh restart my-app` |
+| `cleanup [container_name] [container2...] [--all]` | Remove specific containers or all state-managed containers | `./docker_mgr.sh cleanup --all` |
+| `cleanup all` | Remove ALL containers, images, volumes, networks (DANGER) | `./docker_mgr.sh cleanup all` |
+| `nuke` | Interactive nuke with confirmation prompt | `./docker_mgr.sh nuke` |
+| `status [container_name] [container2...]` | Show container status | `./docker_mgr.sh status my-app` |
+| `logs [container_name] [container2...]` | Show container logs | `./docker_mgr.sh logs my-app` |
+| `list [resource_type]` | List Docker resources | `./docker_mgr.sh list containers` |
+| `config` | Show configuration | `./docker_mgr.sh config` |
+| `state` | Show state summary | `./docker_mgr.sh state` |
+| `help` | Show help | `./docker_mgr.sh help` |
 
 ### Options
 
@@ -99,120 +103,120 @@ docker-ops-manager/
 #### Generate containers from YAML
 ```bash
 # Generate from single YAML file
-./docker_ops_manager.sh generate docker-compose.yml
+./docker_mgr.sh generate docker-compose.yml
 
 # Generate from multiple YAML files
-./docker_ops_manager.sh generate app1.yml app2.yml app3.yml
+./docker_mgr.sh generate app1.yml app2.yml app3.yml
 
 # Generate specific container from YAML
-./docker_ops_manager.sh generate docker-compose.yml web-server
+./docker_mgr.sh generate docker-compose.yml web-server
 
 # Generate with custom options
-./docker_ops_manager.sh generate docker-compose.yml --force --timeout 300
+./docker_mgr.sh generate docker-compose.yml --force --timeout 300
 ```
 
 #### Multi-container operations
 ```bash
 # Start multiple containers
-./docker_ops_manager.sh start nginx-app web-app db-app
+./docker_mgr.sh start nginx-app web-app db-app
 
 # Stop multiple containers
-./docker_ops_manager.sh stop nginx-app web-app
+./docker_mgr.sh stop nginx-app web-app
 
 # Install multiple containers
-./docker_ops_manager.sh install nginx-app web-app db-app
+./docker_mgr.sh install nginx-app web-app db-app
 
 # Show status of multiple containers
-./docker_ops_manager.sh status nginx-app web-app db-app
+./docker_mgr.sh status nginx-app web-app db-app
 
 # Show logs of multiple containers
-./docker_ops_manager.sh logs nginx-app web-app
+./docker_mgr.sh logs nginx-app web-app
 ```
 
 #### Start/Stop containers
 ```bash
 # Start last container
-./docker_ops_manager.sh start
+./docker_mgr.sh start
 
 # Start specific container
-./docker_ops_manager.sh start my-app
+./docker_mgr.sh start my-app
 
 # Stop container
-./docker_ops_manager.sh stop my-app
+./docker_mgr.sh stop my-app
 
 # Restart container
-./docker_ops_manager.sh restart my-app
+./docker_mgr.sh restart my-app
 ```
 
 #### Container management
 ```bash
 # Install container
-./docker_ops_manager.sh install my-app
+./docker_mgr.sh install my-app
 
 # Reinstall container
-./docker_ops_manager.sh reinstall my-app
+./docker_mgr.sh reinstall my-app
 
 # Show container status
-./docker_ops_manager.sh status my-app
+./docker_mgr.sh status my-app
 
 # Show container logs
-./docker_ops_manager.sh logs my-app
+./docker_mgr.sh logs my-app
 ```
 
 #### Enhanced cleanup operations
 ```bash
 # Cleanup specific container
-./docker_ops_manager.sh cleanup my-app
+./docker_mgr.sh cleanup my-app
 
 # Cleanup multiple containers
-./docker_ops_manager.sh cleanup nginx-app web-app db-app
+./docker_mgr.sh cleanup nginx-app web-app db-app
 
 # Cleanup all state-managed containers only
-./docker_ops_manager.sh cleanup --all
+./docker_mgr.sh cleanup --all
 
 # Cleanup ALL containers, images, volumes, networks (DANGER)
-./docker_ops_manager.sh cleanup all
+./docker_mgr.sh cleanup all
 
 # Interactive nuke with confirmation prompt
-./docker_ops_manager.sh nuke
+./docker_mgr.sh nuke
 
 # Force nuke without confirmation
-./docker_ops_manager.sh nuke --force
+./docker_mgr.sh nuke --force
 ```
 
 #### Resource listing
 ```bash
 # List all resources
-./docker_ops_manager.sh list
+./docker_mgr.sh list
 
 # List specific resource types
-./docker_ops_manager.sh list containers
-./docker_ops_manager.sh list images
-./docker_ops_manager.sh list projects
-./docker_ops_manager.sh list volumes
-./docker_ops_manager.sh list networks
+./docker_mgr.sh list containers
+./docker_mgr.sh list images
+./docker_mgr.sh list projects
+./docker_mgr.sh list volumes
+./docker_mgr.sh list networks
 
 # List with different formats
-./docker_ops_manager.sh list containers --format json
-./docker_ops_manager.sh list images --format custom
+./docker_mgr.sh list containers --format json
+./docker_mgr.sh list images --format custom
 ```
 
 #### Information and debugging
 ```bash
 # List all managed containers
-./docker_ops_manager.sh list
+./docker_mgr.sh list
 
 # Show configuration
-./docker_ops_manager.sh config
+./docker_mgr.sh config
 
 # Show state information
-./docker_ops_manager.sh state
+./docker_mgr.sh state
 
 # Show help
-./docker_ops_manager.sh help
+./docker_mgr.sh help
 
 # Enable tracing for debugging
-./docker_ops_manager.sh --trace start my-app
+./docker_mgr.sh --trace start my-app
 ```
 
 ## Configuration
@@ -297,7 +301,7 @@ Logs are stored in `~/.config/docker-ops-manager/logs/` with the following forma
 Enable detailed method tracing for debugging complex operations:
 
 ```bash
-./docker_ops_manager.sh --trace start my-app
+./docker_mgr.sh --trace start my-app
 ```
 
 Tracing provides detailed information about function calls, parameters, and execution flow.

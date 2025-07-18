@@ -3,7 +3,7 @@
 # Docker Ops Manager - Main Script
 # A comprehensive Docker operations management tool
 # 
-# Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)
+# Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)
 # Licensed under MIT License with Attribution Requirement
 # 
 # Copyright (c) 2024 Gaurav Gupta
