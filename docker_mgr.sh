@@ -2,6 +2,14 @@
 
 # Docker Ops Manager - Main Script
 # A comprehensive Docker operations management tool
+# 
+# Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)
+# Licensed under MIT License with Attribution Requirement
+# 
+# Copyright (c) 2024 Gaurav Gupta
+# 
+# This software is provided "as is", without warranty of any kind.
+# See LICENSE file for complete license terms.
 
 set -euo pipefail
 
@@ -44,6 +52,8 @@ TRACE_ENABLED=false
 # =============================================================================
 initialize_system() {
     print_header "Docker Ops Manager v$SCRIPT_VERSION"
+    print_info "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)"
+    print_info "Licensed under MIT License with Attribution Requirement"
     
     # Load configuration
     load_config
@@ -105,6 +115,9 @@ parse_arguments() {
                 ;;
             --version|-v)
                 echo "Docker Ops Manager v$SCRIPT_VERSION"
+                echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)"
+                echo "Licensed under MIT License with Attribution Requirement"
+                echo "Copyright (c) 2024 Gaurav Gupta"
                 exit 0
                 ;;
             --yaml)
@@ -782,6 +795,10 @@ print_help() {
     echo "  ./docker_ops_manager.sh nuke                 # Interactive nuke with confirmation prompt"
     echo
     echo "For more information, see the documentation."
+    echo
+    echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/gauravgupta/docker-ops-manager)"
+    echo "Licensed under MIT License with Attribution Requirement"
+    echo "Copyright (c) 2024 Gaurav Gupta"
 }
 
 # =============================================================================

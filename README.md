@@ -467,7 +467,43 @@ rm ~/.config/docker-ops-manager/state.json
 
 ## License
 
-This project is open source and available under the MIT License.
+This project is open source and available under the **MIT License with Attribution Requirement**.
+
+### License Terms
+
+This software is licensed under the MIT License with an additional attribution requirement. You are free to:
+
+- Use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software
+- Use the Software for commercial purposes
+
+**However, you must prominently display the following attribution in all distributions, modifications, or derivative works:**
+
+```
+Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)
+```
+
+### Attribution Requirements
+
+The attribution must be included in:
+- All source code files that are modified or derived from this Software
+- Documentation files
+- User interfaces or command-line help text
+- README files or project descriptions
+- Any other materials that describe or present the Software
+
+### Commercial Use
+
+If you use this Software in a commercial product or service, you must:
+- Include the attribution requirement in your product documentation
+- Provide a link to the original project in your product's about section
+- Notify users of the original authorship in any relevant user interfaces
+
+For the complete license text, see the [LICENSE](LICENSE) file.
+
+### Contact
+
+For questions about this license or attribution requirements, please contact:
+Gaurav Gupta - gauravgupta@example.com
 
 ## Support
 
