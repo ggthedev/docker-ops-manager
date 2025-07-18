@@ -1,0 +1,35 @@
+version: "3.8"
+name: traefik-app
+services:
+  traefik:
+    container_name: traefik-reverse-proxy
+    image: traefik:v2.10
+    ports:
+      - "8081:80"
+      - "8082:8082"
+    environment:
+      - TRAEFIK_API_DASHBOARD=true
+      - TRAEFIK_API_INSECURE=true
+      - TRAEFIK_PROVIDERS_DOCKER=true
+      - TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /Users/experimentalist/Scripts/docker-ops-manager/examples/traefik/traefik.yml:/etc/traefik/traefik.yml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  traefik:
+    driver: bridge
+  default:
+    external: true
+    name: traefik
+
+volumes:
+  traefik_data:
+    driver: local 

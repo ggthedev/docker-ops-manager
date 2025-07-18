@@ -1,0 +1,22 @@
+# Traefik configuration file
+api:
+  dashboard: true
+  insecure: true
+  debug: false
+
+entryPoints:
+  web:
+    address: ":80"
+  api:
+    address: ":8082"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: "traefik"
+
+log:
+  level: INFO
+
+accessLog: {} 

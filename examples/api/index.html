@@ -1,0 +1,22 @@
+{
+  "service": "api-service",
+  "status": "running",
+  "timestamp": "2025-07-17T19:45:00Z",
+  "version": "1.0.0",
+  "endpoints": {
+    "status": "/api/status",
+    "health": "/api/health",
+    "info": "/api/info"
+  },
+  "traefik": {
+    "enabled": true,
+    "router": "api-service",
+    "rule": "Host(`api.localhost`)",
+    "entrypoint": "web"
+  },
+  "container": {
+    "name": "api-service",
+    "image": "nginx:alpine",
+    "network": "traefik"
+  }
+} 

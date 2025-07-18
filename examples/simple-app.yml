@@ -1,0 +1,42 @@
+version: '3.8'
+services:
+  web:
+    image: nginx:latest
+    container_name: docker-ops-nginx-web
+    ports:
+      - "8080:80"
+    environment:
+      - NGINX_HOST=localhost
+      - NGINX_PORT=80
+    volumes:
+      - /Users/experimentalist/Scripts/docker-ops-manager/examples/html:/usr/share/nginx/html
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:13-alpine
+    container_name: docker-ops-postgres-db
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d myapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    x-docker-ops:
+      readiness_timeout: 120
+
+volumes:
+  postgres_data: 
