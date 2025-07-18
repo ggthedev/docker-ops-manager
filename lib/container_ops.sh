@@ -886,8 +886,14 @@ wait_for_container_ready() {
     local start_time=$(date +%s)
     local end_time=$((start_time + timeout))
 
+    # Show waiting animation
+    print_info "Waiting for container '$container_name' to be ready (timeout: ${timeout}s)"
+
     # Poll the container status until ready or timeout
     while [[ $(date +%s) -lt $end_time ]]; do
+            # Show static waiting message with animating dots
+        show_waiting_dots $((timeout/2))
+        
         local is_running=$(container_is_running "$container_name" && echo "true" || echo "false")
         local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
         
@@ -912,9 +918,9 @@ wait_for_container_ready() {
         else
             log_debug "$operation" "$container_name" "Container not running yet, waiting..."
         fi
-        
         # Wait 1 second before next check
-        sleep 1
+        sleep 0.8
+        
     done
 
     log_operation_failure "$operation" "$container_name" "Container not ready within timeout (${timeout}s)"

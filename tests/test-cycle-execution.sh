@@ -115,9 +115,11 @@ wait_for_container_health() {
             return 1
         fi
         
+        # Show static waiting message with animating dots
+        show_waiting_dots "Waiting for completion"
+        
         sleep 5
         wait_time=$((wait_time + 5))
-        echo -e "${YELLOW}Still waiting... ($wait_time/$max_wait seconds)${NC}"
     done
     
     print_status "WARNING" "Container $container_name health check timed out"

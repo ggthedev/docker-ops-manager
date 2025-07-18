@@ -484,6 +484,10 @@ wait_for_condition() {
             echo "Condition met"
             return 0
         fi
+        
+        # Show static waiting message with animating dots
+        show_waiting_dots "Waiting for completion"
+        
         sleep "$interval"
     done
     

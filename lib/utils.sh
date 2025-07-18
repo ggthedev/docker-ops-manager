@@ -534,6 +534,169 @@ show_progress() {
     fi
 }
 
+# Show simple dots animation
+# Displays a simple dots animation for waiting operations.
+# Uses minimal resources and provides visual feedback.
+#
+# Input:
+#   $1 - message: The message to display before the animation (optional)
+# Output: Animated dots to stdout
+# Example: show_dots_animation "Waiting for container"
+show_dots_animation() {
+    local message="${1:-}"
+    local dots=""
+    local max_dots=3
+    
+    # Print initial message if provided
+    if [[ -n "$message" ]]; then
+        printf "%s" "$message"
+    fi
+    
+    # Animate dots
+    for ((i=0; i<=max_dots; i++)); do
+        printf "\r%s%s" "$message" "$dots"
+        sleep 0.5
+        dots="${dots}."
+    done
+    
+    # Clear the line
+    printf "\r%*s\r" $(( ${#message} + max_dots + 1 )) ""
+}
+
+# Show simple dots animation only
+# Displays only animating dots for waiting operations.
+# Uses minimal resources and provides visual feedback.
+#
+# Input: None
+# Output: Animated dots to stdout
+# Example: show_waiting_dots
+show_waiting_dots() {
+    local dots=""
+    local max_dots=$1
+    # echo "max_dots: $max_dots"
+    # Animate dots by adding them one by one
+    for ((i=0; i<=max_dots; i++)); do
+        # Add a dot
+        printf "."
+        sleep 0.5
+    done
+    
+    # Clear the line
+    printf "\r%*s\r" $(( max_dots + 1 )) ""
+}
+
+# Global spinner index for maintaining state between calls
+# _SPINNER_INDEX=0
+
+# Show spinner animation
+# Displays a simple spinner animation for waiting operations.
+# Uses minimal resources and provides visual feedback.
+#
+# Input:
+#   $1 - message: The message to display before the spinner (optional)
+# Output: Spinner animation to stdout
+# Example: show_spinner_animation "Processing"
+# show_spinner_animation() {
+#     local message="${1:-}"
+#     local spinner_chars=("-" "\\" "|" "/")
+#     
+#     # Print initial message if provided
+#     if [[ -n "$message" ]]; then
+#         printf "%s " "$message"
+#     fi
+#     
+#     # Animate spinner
+#     printf "%s" "${spinner_chars[$_SPINNER_INDEX]}"
+#     sleep 0.2
+#     
+#     # Update spinner index for next call
+#     _SPINNER_INDEX=$(( (_SPINNER_INDEX + 1) % ${#spinner_chars[@]} ))
+#     
+#     # Clear the spinner character and move back
+#     printf "\b \b"
+# }
+
+# Show waiting animation with timeout
+# Displays a waiting animation for a specified duration.
+# Provides visual feedback during wait operations.
+#
+# Input:
+#   $1 - duration: Duration to show animation in seconds
+#   $2 - message: The message to display (optional, defaults to "Waiting")
+#   $3 - animation_type: Type of animation - "dots" or "spinner" (optional, defaults to "dots")
+# Output: Animation for the specified duration
+# Example: show_waiting_animation 10 "Waiting for container" "dots"
+show_waiting_animation() {
+    local duration="$1"
+    local message="${2:-Waiting}"
+    local animation_type="${3:-dots}"
+    local start_time=$(date +%s)
+    local end_time=$((start_time + duration))
+    
+    # Show animation until timeout
+    while [[ $(date +%s) -lt $end_time ]]; do
+        if [[ "$animation_type" == "spinner" ]]; then
+            # show_spinner_animation "$message"  # Commented out for now
+            show_dots_animation "$message"
+        else
+            show_dots_animation "$message"
+        fi
+    done
+    
+    # Clear the line when done
+    printf "\r%*s\r" $(( ${#message} + 10 )) ""
+}
+
+# Show waiting animation with condition
+# Displays a waiting animation until a condition is met or timeout occurs.
+# Provides visual feedback during wait operations with condition checking.
+#
+# Input:
+#   $1 - condition_command: Command to check condition (should return 0 when condition is met)
+#   $2 - timeout: Maximum time to wait in seconds
+#   $3 - message: The message to display (optional, defaults to "Waiting")
+#   $4 - animation_type: Type of animation - "dots" or "spinner" (optional, defaults to "dots")
+#   $5 - check_interval: Interval between condition checks in seconds (optional, defaults to 1)
+# Output: Animation until condition is met or timeout
+# Return code: 0 if condition met, 1 if timeout
+# Example: show_waiting_animation_with_condition "test -f /tmp/file" 30 "Waiting for file" "dots"
+show_waiting_animation_with_condition() {
+    local condition_command="$1"
+    local timeout="$2"
+    local message="${3:-Waiting}"
+    local animation_type="${4:-dots}"
+    local check_interval="${5:-1}"
+    local start_time=$(date +%s)
+    local end_time=$((start_time + timeout))
+    local last_check_time=0
+    
+    # Show animation until condition is met or timeout
+    while [[ $(date +%s) -lt $end_time ]]; do
+        # Check condition at specified intervals
+        local current_time=$(date +%s)
+        if [[ $((current_time - last_check_time)) -ge $check_interval ]]; then
+            if eval "$condition_command" >/dev/null 2>&1; then
+                # Clear the line when condition is met
+                printf "\r%*s\r" $(( ${#message} + 10 )) ""
+                return 0
+            fi
+            last_check_time=$current_time
+        fi
+        
+        # Show animation
+        if [[ "$animation_type" == "spinner" ]]; then
+            # show_spinner_animation "$message"  # Commented out for now
+            show_dots_animation "$message"
+        else
+            show_dots_animation "$message"
+        fi
+    done
+    
+    # Clear the line when timeout occurs
+    printf "\r%*s\r" $(( ${#message} + 10 )) ""
+    return 1
+}
+
 # Check if string contains substring
 # Tests whether a string contains a specific substring.
 # Case-sensitive comparison.
@@ -832,6 +995,9 @@ wait_for_system_ready() {
             print_success "System is ready"
             return 0
         fi
+        
+        # Show static waiting message with animating dots
+        show_waiting_dots "Waiting for completion"
         
         sleep "$check_interval"
     done

@@ -52,7 +52,6 @@ start_container_operation() {
         print_success "Container '$container_name' started successfully"
         
         # Wait for container to be ready
-        print_info "Waiting for container to be ready..."
         if wait_for_container_ready "$container_name" "$TIMEOUT" ""; then
             print_success "Container '$container_name' is ready"
         else
