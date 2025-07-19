@@ -560,7 +560,7 @@ show_dots_animation() {
     done
     
     # Clear the line
-    printf "\r%*s\r" $(( ${#message} + max_dots + 1 )) ""
+    printf "\r%*s\r" 80 ""
 }
 
 # Show simple dots animation only
@@ -578,7 +578,7 @@ show_waiting_dots() {
     # Show one cycle of dots animation
     for ((i=0; i<=max_dots; i++)); do
         # Clear previous dots and show current state
-        printf "\r%*s\r" $(( max_dots + 1 )) ""
+        printf "\r%*s\r" 80 ""
         for ((j=0; j<i; j++)); do
             printf "."
         done
@@ -648,7 +648,7 @@ show_waiting_animation() {
     done
     
     # Clear the line when done
-    printf "\r%*s\r" $(( ${#message} + 10 )) ""
+    printf "\r%*s\r" 80 ""
 }
 
 # Show waiting animation with condition
@@ -681,7 +681,7 @@ show_waiting_animation_with_condition() {
         if [[ $((current_time - last_check_time)) -ge $check_interval ]]; then
             if eval "$condition_command" >/dev/null 2>&1; then
                 # Clear the line when condition is met
-                printf "\r%*s\r" $(( ${#message} + 10 )) ""
+                printf "\r%*s\r" 80 ""
                 return 0
             fi
             last_check_time=$current_time
@@ -697,7 +697,7 @@ show_waiting_animation_with_condition() {
     done
     
     # Clear the line when timeout occurs
-    printf "\r%*s\r" $(( ${#message} + 10 )) ""
+    printf "\r%*s\r" 80 ""
     return 1
 }
 
@@ -744,7 +744,7 @@ start_signal_animation() {
     # Start animation in background process
     (
         # Set up signal handler for this process
-        trap 'rm -f "$signal_file"; printf "\r%*s\r" $((dots_count + 1)) ""; exit 0' SIGUSR1 EXIT
+        trap 'rm -f "$signal_file"; printf "\r%*s\r" 80 ""; exit 0' SIGUSR1 EXIT
         
         # Run animation until signal file is created or signal received
         while [[ ! -f "$signal_file" ]]; do
@@ -753,7 +753,7 @@ start_signal_animation() {
         
         # Clean up and exit
         rm -f "$signal_file"
-        printf "\r%*s\r" $((dots_count + 1)) ""
+        printf "\r%*s\r" 80 ""
     ) &
     
     _ANIMATION_PID=$!
@@ -809,6 +809,9 @@ stop_signal_animation() {
         _ANIMATION_RUNNING=false
         _ANIMATION_SIGNAL_RECEIVED=false
         _ANIMATION_SIGNAL_FILE=""
+        
+        # Ensure line is cleared after animation stops
+        printf "\r%*s\r" 80 ""
         
         log_debug "ANIMATION" "" "Signal-based animation stopped"
     fi
@@ -1294,6 +1297,79 @@ send_notification() {
         # Try macOS notification system
         osascript -e "display notification \"$message\" with title \"$title\""
     fi
+}
+
+# =============================================================================
+# PROGRESS INDICATORS FOR CONTAINER GENERATION
+# =============================================================================
+
+# Show generation progress with animation
+# Displays animated progress messages for container generation steps
+# Provides visual feedback during the generation process
+#
+# Input:
+#   $1 - step: The current step (1-4)
+#   $2 - yaml_file: The YAML file being processed
+#   $3 - container_name: The container name being generated
+# Output: Animated progress message to stdout
+# Example: show_generation_progress 1 "docker-compose.yml" "nginx"
+show_generation_progress() {
+    local step="$1"
+    local yaml_file="$2"
+    local container_name="$3"
+    
+    case "$step" in
+        1)
+            printf "\r%s" "📋 Extracting config from $(basename "$yaml_file")"
+            show_waiting_dots 3
+            ;;
+        2)
+            printf "\r%s" "🔧 Generating docker-compose file"
+            show_waiting_dots 3
+            ;;
+        3)
+            printf "\r%s" "🐳 Creating container '$container_name'"
+            show_waiting_dots 3
+            ;;
+        4)
+            printf "\r%s" "✅ Finalizing container setup"
+            show_waiting_dots 3
+            ;;
+    esac
+}
+
+# Show generation step completion
+# Displays a completion message for each generation step
+# Clears the progress line and shows completion status
+#
+# Input:
+#   $1 - step: The completed step (1-4)
+#   $2 - yaml_file: The YAML file being processed
+#   $3 - container_name: The container name being generated
+# Output: Completion message to stdout
+# Example: show_generation_step_complete 1 "docker-compose.yml" "nginx"
+show_generation_step_complete() {
+    local step="$1"
+    local yaml_file="$2"
+    local container_name="$3"
+    
+    # Clear the progress line
+    printf "\r%*s\r" 80 ""
+    
+    case "$step" in
+        1)
+            print_success "Config extracted from $(basename "$yaml_file")"
+            ;;
+        2)
+            print_success "Docker-compose file generated"
+            ;;
+        3)
+            print_success "Container '$container_name' created"
+            ;;
+        4)
+            print_success "Container setup completed"
+            ;;
+    esac
 }
 
  

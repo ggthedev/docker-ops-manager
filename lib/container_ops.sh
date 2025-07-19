@@ -903,6 +903,9 @@ wait_for_container_ready() {
     local start_time=$(date +%s)
     local end_time=$((start_time + timeout))
 
+    # Ensure any previous animation is fully cleared
+    printf "\r%*s\r" 80 ""
+    
     # Show waiting animation
     print_info "Waiting for container '$container_name' to be ready (timeout: ${timeout}s)"
 
@@ -926,6 +929,8 @@ wait_for_container_ready() {
                 # If healthy, stop animation and return success
                 if [[ "$health_status" == "healthy" ]]; then
                     stop_signal_animation
+                    # Small delay to ensure animation is fully cleared
+                    sleep 0.1
                     log_operation_success "$operation" "$container_name" "Container is healthy and ready"
                     return 0
                 elif [[ "$health_status" == "unhealthy" ]]; then
@@ -948,6 +953,8 @@ wait_for_container_ready() {
 
     # Timeout reached - stop animation
     stop_signal_animation
+    # Small delay to ensure animation is fully cleared
+    sleep 0.1
 
     # After timeout, check if container is running and show appropriate message
     local is_running=$(container_is_running "$container_name" && echo "true" || echo "false")

@@ -144,4 +144,111 @@ Both operations now support the `--no-start` flag:
 - **Generate**: Uses `generate_from_yaml()` function that processes YAML files directly
 - **Install**: Uses `install_container()` function that calls `generate_from_yaml()` with stored YAML path
 - **State Management**: Both operations update the state file with container metadata
-- **--no-start Flag**: Both operations respect the flag to create containers without starting them 
+- **--no-start Flag**: Both operations respect the flag to create containers without starting them
+
+---
+
+# Animation Display Issue Fix
+
+## Problem Statement
+During container generation, extraneous characters (specifically "i") were appearing in the output after progress animations. The issue manifested as:
+
+```
+...ℹ Waiting for container 'nginx-app-container' to be ready (timeout: 60s)
+```
+
+Where the dots (`...`) from the animation were not being properly cleared before the next message was printed, causing visual artifacts.
+
+## Root Cause Analysis
+The issue was caused by race conditions in the animation system:
+
+1. **Line Clearing Logic**: The `printf "\r%*s\r"` commands were using dynamic width calculations that weren't working correctly
+2. **Timing Issues**: There was insufficient delay between stopping animations and printing the next message
+3. **Animation State**: The signal-based animation system wasn't properly clearing the terminal line before new content was displayed
+
+## Solution Approach
+
+### 1. Fixed Line Clearing Logic
+**Problem**: Dynamic width calculations in `printf "\r%*s\r" $((dots_count + 1)) ""` were unreliable
+**Solution**: Changed to fixed width of 80 characters: `printf "\r%*s\r" 80 ""`
+
+**Files Modified**:
+- `lib/utils.sh`: Updated all animation functions to use consistent line clearing
+
+### 2. Added Explicit Line Clearing
+**Problem**: Race conditions between animation stopping and next message printing
+**Solution**: Added explicit line clearing before showing waiting messages
+
+**Files Modified**:
+- `lib/container_ops.sh`: Added `printf "\r%*s\r" 80 ""` before `print_info` calls
+
+### 3. Added Timing Delays
+**Problem**: Insufficient time for animations to fully clear
+**Solution**: Added small delays (`sleep 0.1`) after stopping animations
+
+**Files Modified**:
+- `lib/container_ops.sh`: Added delays after `stop_signal_animation` calls
+- `lib/utils.sh`: Enhanced `stop_signal_animation` with additional line clearing
+
+### 4. Enhanced Animation Cleanup
+**Problem**: Animation processes weren't properly cleaning up terminal state
+**Solution**: Added explicit line clearing in animation cleanup functions
+
+## Implementation Details
+
+### Key Changes Made
+
+1. **Consistent Line Clearing**:
+   ```bash
+   # Before (problematic)
+   printf "\r%*s\r" $((dots_count + 1)) ""
+   
+   # After (fixed)
+   printf "\r%*s\r" 80 ""
+   ```
+
+2. **Explicit Pre-Message Clearing**:
+   ```bash
+   # Ensure any previous animation is fully cleared
+   printf "\r%*s\r" 80 ""
+   print_info "Waiting for container '$container_name' to be ready..."
+   ```
+
+3. **Animation Stop Delays**:
+   ```bash
+   stop_signal_animation
+   # Small delay to ensure animation is fully cleared
+   sleep 0.1
+   ```
+
+4. **Enhanced Cleanup**:
+   ```bash
+   # Ensure line is cleared after animation stops
+   printf "\r%*s\r" 80 ""
+   ```
+
+## Testing Results
+
+**Before Fix**:
+```
+...ℹ Waiting for container 'nginx-app-container' to be ready (timeout: 60s)
+```
+
+**After Fix**:
+```
+ℹ Waiting for container 'nginx-app-container' to be ready (timeout: 60s)
+```
+
+## Lessons Learned
+
+1. **Terminal Animation Timing**: Even small race conditions can cause visual artifacts
+2. **Line Clearing Consistency**: Using fixed widths is more reliable than dynamic calculations
+3. **Animation State Management**: Proper cleanup is essential for multi-step processes
+4. **User Experience**: Clean output is crucial for professional tool appearance
+
+## Future Considerations
+
+- Consider implementing a more robust animation system with better state management
+- Add animation debugging capabilities for troubleshooting similar issues
+- Consider using a dedicated terminal library for complex animations
+- Implement animation queuing to prevent overlapping animations 

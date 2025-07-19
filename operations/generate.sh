@@ -30,6 +30,9 @@ generate_from_yaml() {
     
     log_operation_start "$operation" "$container_name" "Generating container from YAML"
     
+    # Show initial progress
+    show_generation_progress 1 "$yaml_file" "$container_name"
+    
     # Validate YAML file
     trace_yaml_parse "$yaml_file" "validate" "Checking file existence and syntax"
     if ! validate_yaml_file "$yaml_file"; then
@@ -47,6 +50,10 @@ generate_from_yaml() {
         return 1
     fi
     trace_log "YAML validation successful" "INFO"
+    show_generation_step_complete 1 "$yaml_file" "$container_name"
+    
+    # Show progress for YAML type detection
+    show_generation_progress 2 "$yaml_file" "$container_name"
     
     # Detect YAML type
     trace_yaml_parse "$yaml_file" "detect_type" "Analyzing YAML structure"
@@ -170,6 +177,11 @@ generate_from_yaml() {
         trace_log "Container does not exist, proceeding with creation" "INFO"
     fi
     
+    show_generation_step_complete 2 "$yaml_file" "$container_name"
+    
+    # Show progress for container creation
+    show_generation_progress 3 "$yaml_file" "$container_name"
+    
     # Generate container based on YAML type
     trace_log "Generating container using type: $yaml_type" "INFO"
     case "$yaml_type" in
@@ -200,6 +212,10 @@ generate_from_yaml() {
     set_last_operation "$operation"
     trace_state_operation "set" "last_yaml_file" "$yaml_file"
     set_last_yaml_file "$yaml_file"
+    
+    # Show final progress step
+    show_generation_progress 4 "$yaml_file" "$container_name"
+    show_generation_step_complete 4 "$yaml_file" "$container_name"
     
     log_operation_success "$operation" "$actual_container_name" "Container generated successfully"
     
@@ -433,6 +449,9 @@ generate_from_custom_yaml() {
         return 1
     fi
     
+    # Show progress for image extraction
+    show_generation_progress 3 "$yaml_file" "$container_name"
+    
     # Extract image name
     local image_name=$(extract_image_name "$container_config")
     if [[ -z "$image_name" ]]; then
@@ -462,6 +481,9 @@ generate_from_custom_yaml() {
     local exit_code=$?
     
     if [[ $exit_code -eq 0 ]]; then
+        # Show final progress step
+        show_generation_progress 4 "$yaml_file" "$container_name"
+        show_generation_step_complete 4 "$yaml_file" "$container_name"
         # Update state with container information
         # Resolve actual Docker container name from YAML
         local actual_container_name=$(resolve_container_name "$yaml_file" "$container_name")

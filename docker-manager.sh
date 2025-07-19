@@ -138,10 +138,16 @@ route_operation() {
                 source "$SCRIPT_DIR/operations/cleanup.sh"
                 cleanup_multiple_containers "${CONTAINER_NAMES[@]}" "$FORCE"
             else
-                local container_name=$(get_target_container)
-                print_section "Cleaning up container: $container_name"
-                source "$SCRIPT_DIR/operations/cleanup.sh"
-                cleanup_container "$container_name" "$FORCE"
+                # No container specified - check if we have a last container
+                local last_container=$(get_last_container)
+                if [[ -n "$last_container" ]]; then
+                    print_section "Cleaning up container: $last_container"
+                    source "$SCRIPT_DIR/operations/cleanup.sh"
+                    cleanup_container "$last_container" "$FORCE"
+                else
+                    print_error "No containers to clean up"
+                    exit 1
+                fi
             fi
             ;;
         "nuke")
@@ -438,29 +444,7 @@ handle_restart() {
     fi
 }
 
-# =============================================================================
-# FUNCTION: handle_cleanup
-# =============================================================================
-# Purpose: Handle the cleanup operation to remove containers and images
-# Inputs: None (uses global variables CONTAINER_NAME, FORCE)
-# Outputs: None
-# Side Effects: 
-#   - Sources and calls cleanup operation module
-#   - Handles both single container cleanup and full system cleanup
-# Usage: Called by route_operation when operation is "cleanup"
-# =============================================================================
-handle_cleanup() {
-    if [[ "$CONTAINER_NAME" == "--all" ]]; then
-        print_section "Cleaning up all Docker resources"
-        cleanup_docker "$FORCE"
-    else
-        local container_name=$(get_target_container)
-        print_section "Cleaning up container: $container_name"
-        
-        source "$SCRIPT_DIR/operations/cleanup.sh"
-        cleanup_container "$container_name" "$FORCE"
-    fi
-}
+
 
 # =============================================================================
 # FUNCTION: handle_status
@@ -506,10 +490,19 @@ handle_status() {
 # Usage: Called by route_operation when operation is "logs"
 # =============================================================================
 handle_logs() {
-    local containers=($(get_target_containers))
-    
-    if [[ ${#containers[@]} -eq 1 ]]; then
-        local container_name="${containers[0]}"
+    if [[ ${#CONTAINER_NAMES[@]} -eq 0 ]]; then
+        # No container specified - check if we have a last container
+        local last_container=$(get_last_container)
+        if [[ -n "$last_container" ]]; then
+            print_section "Logs for container: $last_container"
+            source "$SCRIPT_DIR/operations/logs.sh"
+            show_container_logs "$last_container"
+        else
+            print_error "No containers to show logs for"
+            exit 1
+        fi
+    elif [[ ${#CONTAINER_NAMES[@]} -eq 1 ]]; then
+        local container_name="${CONTAINER_NAMES[0]}"
         print_section "Logs for container: $container_name"
         
         source "$SCRIPT_DIR/operations/logs.sh"
@@ -518,7 +511,7 @@ handle_logs() {
         print_section "Logs for multiple containers"
         
         source "$SCRIPT_DIR/operations/logs.sh"
-        show_multiple_containers_logs "${containers[@]}"
+        show_multiple_containers_logs "${CONTAINER_NAMES[@]}"
     fi
 }
 
