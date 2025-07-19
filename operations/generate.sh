@@ -304,8 +304,18 @@ EOF
     fi
     trace_log "Service configuration extracted successfully" "INFO"
     
-    # Run docker-compose up
-    local command="docker-compose -f $temp_compose_file up -d"
+    # Run docker-compose command based on --no-start flag
+    local command=""
+    if [[ "$NO_START" == "true" ]]; then
+        # Create container without starting it
+        command="docker-compose -f $temp_compose_file create"
+        trace_log "Using docker-compose create (no-start mode)" "INFO"
+    else
+        # Create and start container
+        command="docker-compose -f $temp_compose_file up -d"
+        trace_log "Using docker-compose up -d (start mode)" "INFO"
+    fi
+    
     trace_command "$command" "$operation" "$container_name"
     local output=$(execute_docker_command "$operation" "$container_name" "$command" 300)
     local exit_code=$?
@@ -322,13 +332,22 @@ EOF
         local actual_container_name=$(resolve_container_name "$yaml_file" "$container_name")
         local container_id=$(get_container_id "$actual_container_name")
         trace_log "Container ID: $container_id" "DEBUG"
-        update_container_operation "$actual_container_name" "$operation" "$yaml_file" "$container_id" "running"
         
-        # Wait for container to be ready
-        trace_log "Waiting for container to be ready" "INFO"
-        wait_for_container_ready "$container_name" "${TIMEOUT:-}" "$yaml_file"
-        
-        print_success "Container '$container_name' generated and started successfully"
+        if [[ "$NO_START" == "true" ]]; then
+            # Container created but not started
+            update_container_operation "$actual_container_name" "$operation" "$yaml_file" "$container_id" "created"
+            print_success "Container '$container_name' created successfully (not started)"
+            trace_log "Container created without starting (no-start mode)" "INFO"
+        else
+            # Container created and started
+            update_container_operation "$actual_container_name" "$operation" "$yaml_file" "$container_id" "running"
+            
+            # Wait for container to be ready
+            trace_log "Waiting for container to be ready" "INFO"
+            wait_for_container_ready "$container_name" "${TIMEOUT:-}" "$yaml_file"
+            
+            print_success "Container '$container_name' generated and started successfully"
+        fi
         
         local end_time=$(date +%s.%N)
         local duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "0")
@@ -426,7 +445,7 @@ generate_from_custom_yaml() {
     fi
     
     # Generate docker run command
-    local docker_run_cmd=$(generate_docker_run_command "$yaml_file" "$container_name" "custom")
+    local docker_run_cmd=$(generate_docker_run_command "$yaml_file" "$container_name" "custom" "$NO_START")
     if [[ -z "$docker_run_cmd" ]]; then
         log_operation_failure "$operation" "$container_name" "Could not generate docker run command - Container: $container_name, Config: $container_config"
         print_error "❌ Could not generate docker run command for '$container_name'"
@@ -447,9 +466,16 @@ generate_from_custom_yaml() {
         # Resolve actual Docker container name from YAML
         local actual_container_name=$(resolve_container_name "$yaml_file" "$container_name")
         local container_id=$(get_container_id "$actual_container_name")
-        update_container_operation "$actual_container_name" "$operation" "$yaml_file" "$container_id" "running"
         
-        print_success "Container '$actual_container_name' generated and started successfully"
+        if [[ "$NO_START" == "true" ]]; then
+            # Container created but not started
+            update_container_operation "$actual_container_name" "$operation" "$yaml_file" "$container_id" "created"
+            print_success "Container '$actual_container_name' created successfully (not started)"
+        else
+            # Container created and started
+            update_container_operation "$actual_container_name" "$operation" "$yaml_file" "$container_id" "running"
+            print_success "Container '$actual_container_name' generated and started successfully"
+        fi
         return 0
     else
         log_operation_failure "$operation" "$container_name" "Failed to generate container from custom YAML - Exit code: $exit_code, Image: $image_name"

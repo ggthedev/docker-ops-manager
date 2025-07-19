@@ -39,6 +39,7 @@ FORCE=false
 TIMEOUT=60
 LOG_LEVEL=""
 TRACE_ENABLED=false
+NO_START=false      # Flag to create container without starting it
 
 # =============================================================================
 # FUNCTION: initialize_system
@@ -105,25 +106,22 @@ initialize_system() {
 # =============================================================================
 route_operation() {
     case "$OPERATION" in
-        "generate")
+        "generate"|"install")
             handle_generate
             ;;
-        "install")
-            handle_install
+        "update"|"refresh")
+            handle_update
             ;;
-        "reinstall")
-            handle_reinstall
-            ;;
-        "start"|"run")
+        "start"|"run"|"up")
             handle_start
             ;;
-        "stop")
+        "stop"|"down")
             handle_stop
             ;;
         "restart")
             handle_restart
             ;;
-        "cleanup")
+        "clean"|"delete"|"remove")
             # Check for --all flag to cleanup state-managed containers only
             if [[ ${#CONTAINER_NAMES[@]} -eq 1 && "${CONTAINER_NAMES[0]}" == "--all" ]]; then
                 print_section "Cleaning up all state-managed containers"
@@ -151,7 +149,7 @@ route_operation() {
             source "$SCRIPT_DIR/operations/cleanup.sh"
             nuke_docker_system "$FORCE"
             ;;
-        "status")
+        "status"|"state")
             handle_status
             ;;
         "logs")
@@ -160,17 +158,18 @@ route_operation() {
         "list")
             handle_list
             ;;
-        "config")
-            handle_config
-            ;;
-        "state")
-            handle_state
-            ;;
-        "env")
+        "config"|"env")
             handle_env
             ;;
         "help")
-            print_help
+            if [[ ${#CONTAINER_NAMES[@]} -gt 0 ]]; then
+                # Command-specific help
+                local command="${CONTAINER_NAMES[0]}"
+                print_command_help "$command"
+            else
+                # General help
+                print_help
+            fi
             ;;
         *)
             print_error "Unknown operation: $OPERATION"
@@ -267,6 +266,32 @@ handle_generate() {
         else
             print_warning "Processed $success_count out of $total_count YAML files successfully"
         fi
+    fi
+}
+
+# =============================================================================
+# FUNCTION: handle_update
+# =============================================================================
+# Purpose: Handle the update/refresh operation to update containers
+# Inputs: None (uses global variables)
+# Outputs: None
+# Side Effects: Sources and calls update operation module
+# Usage: Called by route_operation when operation is "update" or "refresh"
+# =============================================================================
+handle_update() {
+    local containers=($(get_target_containers))
+    
+    if [[ ${#containers[@]} -eq 1 ]]; then
+        local container_name="${containers[0]}"
+        print_section "Updating container: $container_name"
+        
+        source "$SCRIPT_DIR/operations/install.sh"
+        update_container "$container_name"
+    else
+        print_section "Updating multiple containers"
+        
+        source "$SCRIPT_DIR/operations/install.sh"
+        update_multiple_containers "${containers[@]}"
     fi
 }
 
@@ -510,14 +535,23 @@ handle_list() {
     source "$SCRIPT_DIR/operations/list.sh"
     
     local resource_type="all"
+    local filter="all"
+    
     if [[ ${#CONTAINER_NAMES[@]} -gt 0 ]]; then
         resource_type="${CONTAINER_NAMES[0]}"
+        
+        # Check for special filter options
+        if [[ "$resource_type" == "running" || "$resource_type" == "lr" ]]; then
+            resource_type="containers"
+            filter="running"
+        fi
     fi
+    
     local format="table"
     
     case "$resource_type" in
         "containers"|"container")
-            list_containers "$format" "all"
+            list_containers "$format" "$filter"
             ;;
         "images"|"image")
             list_images "$format" "all"
@@ -537,6 +571,7 @@ handle_list() {
         *)
             print_error "Unknown resource type: $resource_type"
             print_info "Available resource types: containers, images, projects, volumes, networks, all"
+            print_info "Special filters: running, lr (for running containers only)"
             exit 1
             ;;
     esac

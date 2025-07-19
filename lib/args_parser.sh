@@ -11,7 +11,7 @@
 # =============================================================================
 # FUNCTION: parse_arguments
 # =============================================================================
-# Purpose: Parse command line arguments using getopts for robust option handling
+# Purpose: Parse command line arguments using a simple, reliable approach
 # Inputs: All command line arguments
 # Outputs: None (side effects: sets global variables)
 # Side Effects:
@@ -22,7 +22,6 @@
 # Usage: Called automatically during script startup with all command line args
 # =============================================================================
 parse_arguments() {
-    # First pass: handle long options and help/version
     local args=("$@")
     local i=0
     
@@ -30,87 +29,74 @@ parse_arguments() {
         local arg="${args[$i]}"
         
         case "$arg" in
-            --help)
+            --help|-h)
                 print_help
                 exit 0
                 ;;
-            --version)
+            --version|-v)
                 echo "Docker Ops Manager v$SCRIPT_VERSION"
                 echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
                 echo "Licensed under MIT License with Attribution Requirement"
                 echo "Copyright (c) 2024 Gaurav Gupta"
                 exit 0
                 ;;
-            --generate)
+            --generate|-g)
                 OPERATION="generate"
                 i=$((i+1))
                 ;;
-            --install)
+            --install|-i)
                 OPERATION="install"
                 i=$((i+1))
                 ;;
-            --reinstall)
-                OPERATION="reinstall"
+            --update|--refresh|-U)
+                OPERATION="update"
                 i=$((i+1))
                 ;;
-            --start|--run)
+            --start|--run|--up|-r)
                 OPERATION="start"
                 i=$((i+1))
                 ;;
-            --stop)
-                OPERATION="stop"
-                i=$((i+1))
-                ;;
-            --restart)
+            --restart|-R)
                 OPERATION="restart"
                 i=$((i+1))
                 ;;
-            --cleanup)
-                OPERATION="cleanup"
+            --stop|--down|-s)
+                OPERATION="stop"
                 i=$((i+1))
                 ;;
-            --nuke)
-                OPERATION="nuke"
-                i=$((i+1))
-                ;;
-            --status)
+            --status|--state|-S)
                 OPERATION="status"
                 i=$((i+1))
                 ;;
-            --logs)
-                OPERATION="logs"
+            --clean|--delete|--remove|-c)
+                OPERATION="clean"
                 i=$((i+1))
                 ;;
-            --list)
+            --list|-l)
                 OPERATION="list"
                 i=$((i+1))
                 ;;
-            --config)
-                OPERATION="config"
+            --nuke|-n)
+                OPERATION="nuke"
                 i=$((i+1))
                 ;;
-            --state)
-                OPERATION="state"
-                i=$((i+1))
-                ;;
-            --env)
+            --env|--config|-e)
                 OPERATION="env"
                 i=$((i+1))
                 ;;
-            --yaml)
-                if [[ $((i+1)) -lt ${#args[@]} ]]; then
-                    YAML_FILES+=("${args[$((i+1))]}")
-                    i=$((i+2))
-                else
-                    print_error "Missing value for --yaml option"
-                    exit 1
-                fi
+            --logs|-L)
+                OPERATION="logs"
+                i=$((i+1))
                 ;;
-            --force)
+            --force|-f)
                 FORCE=true
                 i=$((i+1))
                 ;;
-            --timeout)
+            --no-start)
+                NO_START=true
+                i=$((i+1))
+                ;;
+            --timeout|-t)
                 if [[ $((i+1)) -lt ${#args[@]} ]]; then
                     TIMEOUT="${args[$((i+1))]}"
                     i=$((i+2))
@@ -119,7 +105,16 @@ parse_arguments() {
                     exit 1
                 fi
                 ;;
-            --log-level)
+            --yaml|-y)
+                if [[ $((i+1)) -lt ${#args[@]} ]]; then
+                    YAML_FILES+=("${args[$((i+1))]}")
+                    i=$((i+2))
+                else
+                    print_error "Missing value for --yaml option"
+                    exit 1
+                fi
+                ;;
+            --log-level|-d)
                 if [[ $((i+1)) -lt ${#args[@]} ]]; then
                     LOG_LEVEL="${args[$((i+1))]}"
                     i=$((i+2))
@@ -128,7 +123,7 @@ parse_arguments() {
                     exit 1
                 fi
                 ;;
-            --trace)
+            --trace|-T)
                 TRACE_ENABLED=true
                 i=$((i+1))
                 ;;
@@ -148,129 +143,36 @@ parse_arguments() {
                 exit 1
                 ;;
             -*)
-                # Short options will be handled by getopts in the second pass
-                break
+                print_error "Unknown short option: $arg"
+                print_info "Use --help to see available options"
+                exit 1
                 ;;
             *)
-                # Positional arguments will be handled after getopts
-                break
+                # Handle positional arguments based on operation
+                if [[ -z "$OPERATION" ]]; then
+                    OPERATION="$arg"
+                elif [[ "$OPERATION" == "help" ]]; then
+                    # For help operation, treat next argument as command name
+                    if [[ ${#CONTAINER_NAMES[@]} -eq 0 ]]; then
+                        CONTAINER_NAMES+=("$arg")
+                    else
+                        print_error "Too many arguments for help command"
+                        print_info "Use './docker_mgr.sh help [COMMAND]'"
+                        exit 1
+                    fi
+                elif [[ "$OPERATION" == "generate" ]]; then
+                    # For generate operation, collect all YAML files
+                    YAML_FILES+=("$arg")
+                elif [[ "$OPERATION" == "list" ]]; then
+                    # For list operation, treat as resource type
+                    CONTAINER_NAMES+=("$arg")
+                else
+                    # Container names for other operations
+                    CONTAINER_NAMES+=("$arg")
+                fi
+                i=$((i+1))
                 ;;
         esac
-    done
-    
-    # Second pass: use getopts for short options
-    # Reset OPTIND for getopts
-    OPTIND=1
-    
-    # Define short options string for getopts
-    # Format: "option:value" where : means the option requires a value
-    local shortopts="hvgirxstcnualCefy:o:d:T"
-    
-    # Parse short options with custom error handling
-    while getopts "$shortopts" opt 2>/dev/null; do
-        case $opt in
-            h)
-                print_help
-                exit 0
-                ;;
-            v)
-                echo "Docker Ops Manager v$SCRIPT_VERSION"
-                echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
-                echo "Licensed under MIT License with Attribution Requirement"
-                echo "Copyright (c) 2024 Gaurav Gupta"
-                exit 0
-                ;;
-            g)
-                OPERATION="generate"
-                ;;
-            i)
-                OPERATION="install"
-                ;;
-            r)
-                OPERATION="reinstall"
-                ;;
-            s)
-                OPERATION="start"
-                ;;
-            x)
-                OPERATION="stop"
-                ;;
-            t)
-                OPERATION="restart"
-                ;;
-            c)
-                OPERATION="cleanup"
-                ;;
-            n)
-                OPERATION="nuke"
-                ;;
-            u)
-                OPERATION="status"
-                ;;
-            l)
-                OPERATION="logs"
-                ;;
-            a)
-                OPERATION="list"
-                ;;
-            C)
-                OPERATION="config"
-                ;;
-            e)
-                OPERATION="state"
-                ;;
-            f)
-                FORCE=true
-                ;;
-            y)
-                YAML_FILES+=("$OPTARG")
-                ;;
-            o)
-                TIMEOUT="$OPTARG"
-                ;;
-            d)
-                LOG_LEVEL="$OPTARG"
-                ;;
-            T)
-                TRACE_ENABLED=true
-                ;;
-            \?)
-                print_error "Invalid option: -${OPTARG:-unknown}"
-                print_info "Use --help to see available options"
-                exit 1
-                ;;
-            :)
-                print_error "Option -${OPTARG:-unknown} requires an argument"
-                print_info "Use --help to see available options"
-                exit 1
-                ;;
-        esac
-    done
-    
-    # Check if getopts failed
-    if [[ $? -ne 0 ]]; then
-        print_error "Invalid command line options"
-        print_info "Use --help to see available options"
-        exit 1
-    fi
-    
-    # Shift processed options out of argument list
-    shift $((OPTIND-1))
-    
-    # Handle remaining positional arguments
-    for arg in "$@"; do
-        if [[ -z "$OPERATION" ]]; then
-            OPERATION="$arg"
-        elif [[ "$OPERATION" == "generate" ]]; then
-            # For generate operation, collect all YAML files
-            YAML_FILES+=("$arg")
-        elif [[ "$OPERATION" == "list" ]]; then
-            # For list operation, treat as resource type
-            CONTAINER_NAMES+=("$arg")
-        else
-            # Container names for other operations
-            CONTAINER_NAMES+=("$arg")
-        fi
     done
 }
 
@@ -285,8 +187,8 @@ parse_arguments() {
 # =============================================================================
 validate_operation() {
     local valid_operations=(
-        "generate" "install" "reinstall" "start" "run" "stop" "restart"
-        "cleanup" "nuke" "status" "logs" "list" "config" "state" "env" "help"
+        "generate" "install" "update" "refresh" "start" "run" "up" "stop" "down" "restart"
+        "clean" "delete" "remove" "nuke" "status" "state" "logs" "list" "config" "env" "help"
     )
     
     for op in "${valid_operations[@]}"; do
@@ -341,67 +243,376 @@ get_target_container() {
 # =============================================================================
 # FUNCTION: print_help
 # =============================================================================
-# Purpose: Display comprehensive help information for the Docker Ops Manager
+# Purpose: Display concise help information for the Docker Ops Manager
 # Inputs: None
 # Outputs: Help text to stdout
 # Side Effects: None
 # Usage: Called when --help is specified or operation is "help"
 # =============================================================================
 print_help() {
-    echo "Docker Ops Manager - A comprehensive Docker operations management tool"
+    echo "Usage: ./docker_mgr.sh [COMMAND] [OPTIONS] [ARGUMENTS]"
     echo
-    echo "Usage: ./docker_ops_manager.sh [OPERATION] [OPTIONS] [CONTAINER_NAME]"
+    echo "Commands:"
+    echo "  generate|install  -g, (generates the image, generates container, but does not start it)"
+    echo "  update/refresh    -U, (stops if needed, deletes container/image, regenerates image/container)"
+    echo "  start|run|up      -r, (starts the container, image must be generated and container must exist)"
+    echo "  restart           -R, (stops running container and starts it again)"
+    echo "  stop|down         -s, (stops the container)"
+    echo "  state|status      -S, (shows the container status)"
+    echo "  clean|delete|remove -c, (removes the container and image)"
+    echo "  list              -l, (detail listing all containers and images)"
+    echo "  nuke              -n, (removes all containers and images)"
+    echo "  env/config        -e, (shows environment variables and configuration)"
+    echo "  logs              -L (shows container logs)"
     echo
-    echo "Operations:"
-    echo "  generate, -g <yaml_file> [yaml_file2...]    Generate containers from YAML files"
-    echo "  install, -i [container_name] [container2...] Install/update containers"
-    echo "  reinstall, -r [container_name] [container2...] Reinstall containers"
-    echo "  start|run, -s [container_name] [container2...] Start containers"
-    echo "  stop, -x [container_name] [container2...]     Stop containers"
-    echo "  restart, -t [container_name] [container2...]  Restart containers"
-    echo "  cleanup, -c [container_name] [container2...] [--all] Remove specific containers or all state-managed containers"
-    echo "  cleanup, -c all                             Remove ALL containers, images, volumes, networks (DANGER)"
-    echo "  nuke, -n                                    Nuke Docker system (remove all containers, images, volumes, networks)"
-    echo "  status, -u [container_name] [container2...]  Show container status"
-    echo "  logs, -l [container_name] [container2...]    Show container logs"
-    echo "  list, -a [resource_type]                    List Docker resources (containers, images, projects, volumes, networks, all)"
-    echo "  config, -C                                  Show configuration"
-    echo "  state, -e                                   Show state summary"
-    echo "  env                                         Show environment variables and directory locations"
-    echo "  help, -h                                    Show this help"
+    echo "Options:"
+    echo "  --help, -h        (shows this help message)"
+    echo "  --version, -v     (shows the version of the tool)"
+    echo "  --timeout, -t     (sets the timeout duration)"
+    echo "  --force, -f       (forces the action)"
+    echo "  --no-start        (create container without starting it - generate/install only)"
+    echo "  --yaml, -y        (specifies YAML file for generate operation)"
+    echo "  --log-level, -d   (sets log level: DEBUG, INFO, WARN, ERROR)"
+    echo "  --trace, -T       (enables detailed method tracing)"
     echo
-    echo "Global Options:"
-    echo "  --yaml, -y <file>                          Specify YAML file"
-    echo "  --force, -f                                Force operation"
-    echo "  --timeout, -o <seconds>                    Operation timeout"
-    echo "  --log-level, -d <level>                    Set log level (DEBUG, INFO, WARN, ERROR)"
-    echo "  --trace, -T                                Enable detailed method tracing for debugging"
-    echo "  --version, -v                              Show version information"
-    echo
-    echo "Examples:"
-    echo "  # Long format examples:"
-    echo "  ./docker_ops_manager.sh generate docker-compose.yml my-app"
-    echo "  ./docker_ops_manager.sh generate app1.yml app2.yml app3.yml"
-    echo "  ./docker_ops_manager.sh --generate --yaml docker-compose.yml"
-    echo "  ./docker_ops_manager.sh --cleanup --force nginx"
-    echo "  ./docker_ops_manager.sh --status --timeout 30 my-app"
-    echo
-    echo "  # Short format examples:"
-    echo "  ./docker_ops_manager.sh -g docker-compose.yml my-app"
-    echo "  ./docker_ops_manager.sh -c -f nginx"
-    echo "  ./docker_ops_manager.sh -u -o 30 my-app"
-    echo "  ./docker_ops_manager.sh -n -f"
-    echo "  ./docker_ops_manager.sh -a containers"
-    echo "  ./docker_ops_manager.sh -l my-app"
-    echo
-    echo "  # Mixed format examples:"
-    echo "  ./docker_ops_manager.sh -g --yaml docker-compose.yml"
-    echo "  ./docker_ops_manager.sh --cleanup -f nginx"
-    echo "  ./docker_ops_manager.sh -u --timeout 30 my-app"
-    echo
-    echo "For more information, see the documentation."
-    echo
-    echo "Based on Docker Ops Manager by Gaurav Gupta (https://github.com/ggthedev/docker-ops-manager)"
-    echo "Licensed under MIT License with Attribution Requirement"
-    echo "Copyright (c) 2024 Gaurav Gupta"
+    echo "For help on a command: ./docker_mgr.sh help [COMMAND]"
+    echo "For examples: ./docker_mgr.sh help examples"
+    echo "For more information: visit https://github.com/ggthedev/docker-ops-manager"
+}
+
+# =============================================================================
+# FUNCTION: print_command_help
+# =============================================================================
+# Purpose: Display detailed help for a specific command
+# Inputs: $1 - Command name
+# Outputs: Help text to stdout
+# Side Effects: None
+# Usage: Called when help [COMMAND] is specified
+# =============================================================================
+print_command_help() {
+    local command="$1"
+    
+    # Handle short options by mapping them to full command names
+    case "$command" in
+        -g) command="generate" ;;
+        -i) command="install" ;;
+        -U) command="update" ;;
+        -r) command="start" ;;
+        -R) command="restart" ;;
+        -s) command="stop" ;;
+        -S) command="status" ;;
+        -c) command="clean" ;;
+        -l) command="list" ;;
+        -n) command="nuke" ;;
+        -e) command="env" ;;
+        -L) command="logs" ;;
+    esac
+    
+    case "$command" in
+        generate|g)
+            echo "Usage: ./docker_mgr.sh generate [options] YAML_FILE [CONTAINER_NAME]"
+            echo
+            echo "Generate containers from YAML files. Creates image and container but does not start it."
+            echo
+            echo "Arguments:"
+            echo "  YAML_FILE        Path to YAML file (docker-compose.yml, app.yml, etc.)"
+            echo "  CONTAINER_NAME   Optional container name (extracted from YAML if not provided)"
+            echo
+            echo "Options:"
+            echo "  -y, --yaml YAML_FILE    Specify YAML file (alternative to positional argument)"
+            echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
+            echo "  -f, --force             Force operation, overwrite existing containers"
+            echo "  --no-start              Create container without starting it"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh generate docker-compose.yml"
+            echo "  ./docker_mgr.sh -g docker-compose.yml"
+            echo "  ./docker_mgr.sh generate app.yml my-app"
+            echo "  ./docker_mgr.sh generate docker-compose.yml --no-start"
+            ;;
+        install|i)
+            echo "Usage: ./docker_mgr.sh install [options] [CONTAINER_NAME...]"
+            echo
+            echo "Install containers from their stored YAML configuration."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to install"
+            echo
+            echo "Options:"
+            echo "  -f, --force             Force operation, skip confirmation"
+            echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
+            echo "  --no-start              Create container without starting it"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh install my-container"
+            echo "  ./docker_mgr.sh -i my-container"
+            echo "  ./docker_mgr.sh install nginx-app web-app"
+            echo "  ./docker_mgr.sh install my-container --no-start"
+            ;;
+        update|refresh|U)
+            echo "Usage: ./docker_mgr.sh update [options] [CONTAINER_NAME...]"
+            echo
+            echo "Update/refresh containers. Stops if needed, deletes container/image, regenerates image/container."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to update"
+            echo
+            echo "Options:"
+            echo "  -f, --force             Force operation, skip confirmation"
+            echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh update my-container"
+            echo "  ./docker_mgr.sh -U my-container"
+            echo "  ./docker_mgr.sh update nginx-app web-app"
+            ;;
+        start|run|up|r)
+            echo "Usage: ./docker_mgr.sh start [options] [CONTAINER_NAME...]"
+            echo
+            echo "Start containers. Image must be generated and container must exist."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to start"
+            echo
+            echo "Options:"
+            echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
+            echo "  -f, --force             Force operation"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh start"
+            echo "  ./docker_mgr.sh -r my-container"
+            echo "  ./docker_mgr.sh start nginx-app web-app"
+            ;;
+        restart|R)
+            echo "Usage: ./docker_mgr.sh restart [options] [CONTAINER_NAME...]"
+            echo
+            echo "Restart containers. Stops running container and starts it again."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to restart"
+            echo
+            echo "Options:"
+            echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
+            echo "  -f, --force             Force operation"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh restart my-container"
+            echo "  ./docker_mgr.sh -R my-container"
+            echo "  ./docker_mgr.sh restart nginx-app web-app"
+            ;;
+        stop|down|s)
+            echo "Usage: ./docker_mgr.sh stop [options] [CONTAINER_NAME...]"
+            echo
+            echo "Stop containers."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to stop"
+            echo
+            echo "Options:"
+            echo "  -f, --force             Force operation"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh stop"
+            echo "  ./docker_mgr.sh -s my-container"
+            echo "  ./docker_mgr.sh stop nginx-app web-app"
+            ;;
+        state|status|S)
+            echo "Usage: ./docker_mgr.sh status [options] [CONTAINER_NAME...]"
+            echo
+            echo "Show container status."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to check status"
+            echo
+            echo "Options:"
+            echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh status"
+            echo "  ./docker_mgr.sh -S"
+            echo "  ./docker_mgr.sh status nginx-app web-app"
+            ;;
+        clean|delete|remove|c)
+            echo "Usage: ./docker_mgr.sh clean [options] [CONTAINER_NAME...] [--all]"
+            echo
+            echo "Remove containers and images."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to remove"
+            echo "  --all            Remove all state-managed containers only"
+            echo "  all              Remove ALL containers, images, volumes, networks (DANGER)"
+            echo
+            echo "Options:"
+            echo "  -f, --force             Force operation, skip confirmation"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh clean nginx-app"
+            echo "  ./docker_mgr.sh -c nginx-app"
+            echo "  ./docker_mgr.sh clean nginx-app web-app db-app"
+            echo "  ./docker_mgr.sh clean --all"
+            echo "  ./docker_mgr.sh clean all"
+            ;;
+        list|l)
+            echo "Usage: ./docker_mgr.sh list [RESOURCE_TYPE]"
+            echo
+            echo "List Docker resources. Shows containers by default if no resource type specified."
+            echo
+            echo "Arguments:"
+            echo "  RESOURCE_TYPE    Type of resource to list (containers, images, volumes, networks, all)"
+            echo "                   Use 'running' or 'lr' for running containers only"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh list"
+            echo "  ./docker_mgr.sh -l"
+            echo "  ./docker_mgr.sh list containers"
+            echo "  ./docker_mgr.sh list running"
+            echo "  ./docker_mgr.sh -l running"
+            echo "  ./docker_mgr.sh list images"
+            ;;
+        nuke|n)
+            echo "Usage: ./docker_mgr.sh nuke [options]"
+            echo
+            echo "Remove ALL Docker resources (containers, images, volumes, networks). This is a destructive operation."
+            echo
+            echo "Options:"
+            echo "  -f, --force             Force operation, skip confirmation"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh nuke"
+            echo "  ./docker_mgr.sh -n -f"
+            ;;
+        env|config|e)
+            echo "Usage: ./docker_mgr.sh env"
+            echo
+            echo "Show environment variables and configuration."
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh env"
+            echo "  ./docker_mgr.sh -e"
+            ;;
+        logs|L)
+            echo "Usage: ./docker_mgr.sh logs [options] [CONTAINER_NAME...]"
+            echo
+            echo "Show container logs."
+            echo
+            echo "Arguments:"
+            echo "  CONTAINER_NAME   Container name(s) to show logs for"
+            echo
+            echo "Options:"
+            echo "  -d, --log-level LEVEL   Set log level (DEBUG, INFO, WARN, ERROR)"
+            echo "  -T, --trace             Enable detailed method tracing"
+            echo
+            echo "Examples:"
+            echo "  ./docker_mgr.sh logs"
+            echo "  ./docker_mgr.sh -L"
+            echo "  ./docker_mgr.sh logs nginx-app"
+            echo "  ./docker_mgr.sh logs nginx-app web-app"
+            ;;
+        examples)
+            echo "Docker Ops Manager - Usage Examples"
+            echo "=================================="
+            echo
+            echo "Basic Operations:"
+            echo "  # Generate containers from YAML"
+            echo "  ./docker_mgr.sh generate docker-compose.yml"
+            echo "  ./docker_mgr.sh -g docker-compose.yml"
+            echo "  ./docker_mgr.sh generate app.yml my-app"
+            echo
+            echo "  # Start containers"
+            echo "  ./docker_mgr.sh start"
+            echo "  ./docker_mgr.sh -r my-container"
+            echo "  ./docker_mgr.sh start nginx-app web-app"
+            echo
+            echo "  # Stop containers"
+            echo "  ./docker_mgr.sh stop"
+            echo "  ./docker_mgr.sh -s my-container"
+            echo "  ./docker_mgr.sh stop nginx-app web-app"
+            echo
+            echo "Container Management:"
+            echo "  # Update/refresh containers"
+            echo "  ./docker_mgr.sh update nginx-app"
+            echo "  ./docker_mgr.sh -U nginx-app web-app db-app"
+            echo
+            echo "  # Restart containers"
+            echo "  ./docker_mgr.sh restart nginx-app"
+            echo "  ./docker_mgr.sh -R nginx-app web-app"
+            echo
+            echo "Cleanup Operations:"
+            echo "  # Remove specific containers"
+            echo "  ./docker_mgr.sh clean nginx-app"
+            echo "  ./docker_mgr.sh -c nginx-app web-app db-app"
+            echo
+            echo "  # Cleanup all state-managed containers"
+            echo "  ./docker_mgr.sh clean --all"
+            echo
+            echo "  # Full system cleanup (DANGER)"
+            echo "  ./docker_mgr.sh clean all"
+            echo "  ./docker_mgr.sh nuke"
+            echo "  ./docker_mgr.sh -n -f"
+            echo
+            echo "Information & Status:"
+            echo "  # Check container status"
+            echo "  ./docker_mgr.sh status"
+            echo "  ./docker_mgr.sh -S"
+            echo "  ./docker_mgr.sh status nginx-app web-app"
+            echo
+            echo "  # View container logs"
+            echo "  ./docker_mgr.sh logs nginx-app"
+            echo "  ./docker_mgr.sh -L nginx-app web-app"
+            echo
+            echo "  # List Docker resources"
+            echo "  ./docker_mgr.sh list"
+            echo "  ./docker_mgr.sh -l"
+            echo "  ./docker_mgr.sh list containers"
+            echo "  ./docker_mgr.sh list running"
+            echo "  ./docker_mgr.sh list images"
+            echo
+            echo "Configuration & Environment:"
+            echo "  # Show environment info"
+            echo "  ./docker_mgr.sh env"
+            echo "  ./docker_mgr.sh -e"
+            echo
+            echo "Advanced Usage:"
+            echo "  # Mixed short and long options"
+            echo "  ./docker_mgr.sh -g --yaml docker-compose.yml"
+            echo "  ./docker_mgr.sh --clean -f nginx"
+            echo "  ./docker_mgr.sh -S --timeout 30 my-app"
+            echo
+            echo "  # Multiple YAML files"
+            echo "  ./docker_mgr.sh generate app1.yml app2.yml app3.yml"
+            echo
+            echo "  # With logging and tracing"
+            echo "  ./docker_mgr.sh -g -d DEBUG -T docker-compose.yml"
+            echo
+            echo "For more detailed help on specific commands:"
+            echo "  ./docker_mgr.sh help [COMMAND]"
+            ;;
+        *)
+            echo "Unknown command: $command"
+            echo
+            echo "Available commands:"
+            echo "  generate, install, update, start, stop, restart, status, clean, list, nuke, env, logs"
+            echo
+            echo "Use './docker_mgr.sh help [COMMAND]' for detailed help on a specific command."
+            echo "Use './docker_mgr.sh help examples' for usage examples."
+            ;;
+    esac
 } 

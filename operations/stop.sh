@@ -22,10 +22,15 @@ stop_container_operation() {
     local container_name="$1"
     local operation="STOP"
     
+    trace_enter "stop_container_operation" "container_name=$container_name" "Container stop operation"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name"
     
     # Check if container exists
     if ! container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_container_operation" "1" "Container does not exist" "$duration"
         log_operation_failure "$operation" "$container_name" "Container does not exist"
         print_error "Container '$container_name' does not exist"
         return 1
@@ -33,6 +38,8 @@ stop_container_operation() {
     
     # Check if container is already stopped
     if ! container_is_running "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_container_operation" "0" "Container is already stopped" "$duration"
         log_operation_success "$operation" "$container_name" "Container is already stopped"
         print_success "Container '$container_name' is already stopped"
         return 0
@@ -45,8 +52,13 @@ stop_container_operation() {
         update_container_status "$container_name" "exited" "$container_id"
         
         print_success "Container '$container_name' stopped successfully"
+        
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_container_operation" "0" "Container stopped successfully" "$duration"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_container_operation" "1" "Failed to stop container" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to stop container"
         print_error "Failed to stop container '$container_name'"
         return 1
@@ -72,9 +84,14 @@ stop_multiple_containers() {
     local containers=("$@")
     local operation="STOP_MULTIPLE"
     
+    trace_enter "stop_multiple_containers" "containers=${containers[*]}" "Stopping multiple containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Stopping multiple containers"
     
     if [[ ${#containers[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_multiple_containers" "1" "No containers specified" "$duration"
         print_error "No containers specified"
         return 1
     fi
@@ -93,10 +110,13 @@ stop_multiple_containers() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "stop_multiple_containers" "0" "All $total_count containers stopped successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count containers stopped successfully"
         print_success "All $total_count containers stopped successfully"
     else
+        trace_exit "stop_multiple_containers" "0" "Stopped $success_count out of $total_count containers" "$duration"
         log_operation_failure "$operation" "" "Stopped $success_count out of $total_count containers"
         print_warning "Stopped $success_count out of $total_count containers"
     fi
@@ -121,11 +141,16 @@ stop_multiple_containers() {
 stop_all_running_containers() {
     local operation="STOP_ALL"
     
+    trace_enter "stop_all_running_containers" "" "Stopping all running containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Stopping all running containers"
     
     # Get all running containers
     local running_containers=$(docker ps --format "{{.Names}}" 2>/dev/null)
     if [[ -z "$running_containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_all_running_containers" "0" "No running containers found" "$duration"
         print_info "No running containers found"
         return 0
     fi
@@ -138,6 +163,8 @@ stop_all_running_containers() {
     done <<< "$running_containers"
     
     if [[ ${#container_array[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_all_running_containers" "0" "No running containers found" "$duration"
         print_info "No running containers found"
         return 0
     fi
@@ -145,7 +172,11 @@ stop_all_running_containers() {
     print_info "Found ${#container_array[@]} running containers"
     
     # Stop all containers
-    stop_multiple_containers "${container_array[@]}"
+    local result=$(stop_multiple_containers "${container_array[@]}")
+    local exit_code=$?
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "stop_all_running_containers" "$exit_code" "Stopped ${#container_array[@]} running containers" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -165,11 +196,16 @@ stop_all_running_containers() {
 stop_all_managed_containers() {
     local operation="STOP_MANAGED"
     
+    trace_enter "stop_all_managed_containers" "" "Stopping all managed containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Stopping all managed containers"
     
     # Get all containers from state
     local containers=$(list_containers_in_state)
     if [[ -z "$containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_all_managed_containers" "0" "No managed containers found" "$duration"
         print_info "No managed containers found"
         return 0
     fi
@@ -182,6 +218,8 @@ stop_all_managed_containers() {
     done <<< "$containers"
     
     if [[ ${#container_array[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_all_managed_containers" "0" "No managed containers found" "$duration"
         print_info "No managed containers found"
         return 0
     fi
@@ -189,7 +227,11 @@ stop_all_managed_containers() {
     print_info "Found ${#container_array[@]} managed containers"
     
     # Stop all containers
-    stop_multiple_containers "${container_array[@]}"
+    local result=$(stop_multiple_containers "${container_array[@]}")
+    local exit_code=$?
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "stop_all_managed_containers" "$exit_code" "Stopped ${#container_array[@]} managed containers" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -211,10 +253,15 @@ stop_containers_from_yaml() {
     local yaml_file="$1"
     local operation="STOP_FROM_YAML"
     
+    trace_enter "stop_containers_from_yaml" "yaml_file=$yaml_file" "Stopping containers from YAML file"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Stopping containers from YAML file"
     
     # Validate YAML file
     if ! validate_yaml_file "$yaml_file"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_containers_from_yaml" "1" "YAML file validation failed" "$duration"
         log_operation_failure "$operation" "" "YAML file validation failed"
         return 1
     fi
@@ -226,6 +273,8 @@ stop_containers_from_yaml() {
     # Extract container names
     local containers=$(extract_container_names "$yaml_file" "$yaml_type")
     if [[ -z "$containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_containers_from_yaml" "1" "No containers found in YAML file" "$duration"
         log_operation_failure "$operation" "" "No containers found in YAML file"
         return 1
     fi
@@ -240,7 +289,11 @@ stop_containers_from_yaml() {
     print_info "Found ${#container_array[@]} containers in YAML file"
     
     # Stop containers
-    stop_multiple_containers "${container_array[@]}"
+    local result=$(stop_multiple_containers "${container_array[@]}")
+    local exit_code=$?
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "stop_containers_from_yaml" "$exit_code" "Stopped ${#container_array[@]} containers from YAML" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -262,6 +315,9 @@ stop_container_with_dependencies() {
     local container_name="$1"
     local operation="STOP_WITH_DEPS"
     
+    trace_enter "stop_container_with_dependencies" "container_name=$container_name" "Stopping container with dependencies"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Stopping container with dependencies"
     
     # Get container dependencies from state
@@ -269,6 +325,8 @@ stop_container_with_dependencies() {
     
     # Stop the main container first
     if ! stop_container_operation "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "stop_container_with_dependencies" "1" "Failed to stop main container" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to stop main container"
         return 1
     fi
@@ -295,6 +353,8 @@ stop_container_with_dependencies() {
         done
     fi
     
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "stop_container_with_dependencies" "0" "Container and dependencies stopped" "$duration"
     log_operation_success "$operation" "$container_name" "Container and dependencies stopped"
     return 0
 }
@@ -317,6 +377,9 @@ is_container_used_by_others() {
     local container_name="$1"
     local exclude_container="$2"
     
+    trace_enter "is_container_used_by_others" "container_name=$container_name, exclude_container=$exclude_container" "Check if container is used by others"
+    local start_time=$(date +%s.%3N)
+    
     # This is a simplified check
     # In a real implementation, you might check:
     # - Container links
@@ -325,8 +388,12 @@ is_container_used_by_others() {
     
     # For now, just check if the container is running
     if container_is_running "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "is_container_used_by_others" "0" "Container is in use" "$duration"
         return 0  # Container is in use
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "is_container_used_by_others" "1" "Container is not in use" "$duration"
         return 1  # Container is not in use
     fi
 }
@@ -350,6 +417,9 @@ is_container_used_by_others() {
 force_stop_container() {
     local container_name="$1"
     local operation="FORCE_STOP"
+    
+    trace_enter "force_stop_container" "container_name=$container_name" "Force stopping container"
+    local start_time=$(date +%s.%3N)
     
     log_operation_start "$operation" "$container_name" "Force stopping container"
     

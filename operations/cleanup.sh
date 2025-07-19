@@ -26,8 +26,12 @@ cleanup_container() {
     local container_name="$container_arg"
     local operation="CLEANUP"
 
+    trace_enter "cleanup_container" "container_arg=$container_arg, force=$force" "Container cleanup"
+    local start_time=$(date +%s.%3N)
+
     # If the argument is a YAML file, resolve the actual container name
     if [[ "$container_arg" == *.yml || "$container_arg" == *.yaml ]]; then
+        trace_log "Resolving container name from YAML file: $container_arg" "DEBUG"
         # Extract the first service name from the YAML file
         local service_name=$(yq eval '.services | keys | .[0]' "$container_arg" 2>/dev/null)
         if [[ -z "$service_name" ]]; then
@@ -36,6 +40,7 @@ cleanup_container() {
         fi
         if [[ -n "$service_name" ]]; then
             container_name=$(resolve_container_name "$container_arg" "$service_name")
+            trace_log "Resolved container name: $container_name" "DEBUG"
         fi
     fi
 
@@ -43,6 +48,8 @@ cleanup_container() {
     
     # Check if container exists
     if ! container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_container" "0" "Container does not exist" "$duration"
         log_operation_success "$operation" "$container_name" "Container does not exist"
         print_info "Container '$container_name' does not exist"
         return 0
@@ -50,27 +57,35 @@ cleanup_container() {
     
     # Stop container if running
     if container_is_running "$container_name"; then
+        trace_log "Stopping running container" "INFO"
         print_info "Stopping running container..."
         stop_container "$container_name"
     fi
     
     # Remove container
+    trace_log "Removing container with force=$force" "INFO"
     print_info "Removing container..."
     remove_container "$container_name" "$force"
     local exit_code=$?
     
     if [[ $exit_code -eq 0 ]]; then
         # Remove from state after successful cleanup
+        trace_log "Removing container from state" "DEBUG"
         remove_container_from_state "$container_name"
         
         # Update state to reflect the cleanup operation
+        trace_log "Updating state with cleanup operation" "DEBUG"
         set_last_operation "cleanup"
         set_last_container "$container_name"
         
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_container" "0" "Container cleaned up successfully" "$duration"
         log_operation_success "$operation" "$container_name" "Container cleaned up successfully"
         print_success "Container '$container_name' cleaned up successfully"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_container" "$exit_code" "Failed to cleanup container" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to cleanup container"
         print_error "Failed to cleanup container '$container_name'"
         return $exit_code
@@ -98,9 +113,14 @@ cleanup_multiple_containers() {
     unset "containers[-1]"
     local operation="CLEANUP_MULTIPLE"
     
+    trace_enter "cleanup_multiple_containers" "containers=${containers[*]}, force=$force" "Cleaning up multiple containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Cleaning up multiple containers"
     
     if [[ ${#containers[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_multiple_containers" "1" "No containers specified" "$duration"
         print_error "No containers specified"
         return 1
     fi
@@ -119,15 +139,19 @@ cleanup_multiple_containers() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "cleanup_multiple_containers" "0" "All $total_count containers cleaned up successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count containers cleaned up successfully"
         print_success "All $total_count containers cleaned up successfully"
     else
+        trace_exit "cleanup_multiple_containers" "0" "Cleaned up $success_count out of $total_count containers" "$duration"
         log_operation_failure "$operation" "" "Cleaned up $success_count out of $total_count containers"
         print_warning "Cleaned up $success_count out of $total_count containers"
     fi
     
     # Force sync state to ensure consistency after multiple container cleanup
+    trace_log "Forcing state sync after cleanup" "DEBUG"
     force_sync_state_after_cleanup
     
     return 0
@@ -153,11 +177,17 @@ cleanup_state_managed_containers() {
     local force="${1:-false}"
     local operation="CLEANUP_STATE_MANAGED"
     
+    trace_enter "cleanup_state_managed_containers" "force=$force" "Cleaning up all state-managed containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Cleaning up all state-managed containers"
     
     # Get all containers from state
+    trace_log "Getting containers from state" "DEBUG"
     local containers=$(list_containers_in_state)
     if [[ -z "$containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_state_managed_containers" "0" "No managed containers found in state" "$duration"
         print_info "No managed containers found in state"
         return 0
     fi
@@ -170,11 +200,14 @@ cleanup_state_managed_containers() {
     done <<< "$containers"
     
     if [[ ${#container_array[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_state_managed_containers" "0" "No managed containers found in state" "$duration"
         print_info "No managed containers found in state"
         return 0
     fi
     
     print_info "Found ${#container_array[@]} managed containers in state"
+    trace_log "Found ${#container_array[@]} managed containers in state" "INFO"
     
     local success_count=0
     local total_count=${#container_array[@]}
@@ -188,14 +221,18 @@ cleanup_state_managed_containers() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "cleanup_state_managed_containers" "0" "All $total_count managed containers cleaned up successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count managed containers cleaned up successfully"
         print_success "All $total_count managed containers cleaned up successfully"
         
         # Clear state after successful cleanup of all managed containers
+        trace_log "Clearing state after successful cleanup" "INFO"
         clear_state
         print_info "State file cleared - all managed containers removed"
     else
+        trace_exit "cleanup_state_managed_containers" "0" "Cleaned up $success_count out of $total_count managed containers" "$duration"
         log_operation_failure "$operation" "" "Cleaned up $success_count out of $total_count managed containers"
         print_warning "Cleaned up $success_count out of $total_count managed containers"
     fi
@@ -272,11 +309,17 @@ cleanup_all_containers() {
     local force="${1:-false}"
     local operation="CLEANUP_ALL"
     
+    trace_enter "cleanup_all_containers" "force=$force" "Cleaning up all containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Cleaning up all containers"
     
     # Get all containers
+    trace_log "Getting all containers from Docker" "DEBUG"
     local all_containers=$(docker ps -a --format "{{.Names}}" 2>/dev/null)
     if [[ -z "$all_containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_all_containers" "0" "No containers found" "$duration"
         print_info "No containers found"
         return 0
     fi
@@ -289,20 +332,30 @@ cleanup_all_containers() {
     done <<< "$all_containers"
     
     if [[ ${#container_array[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_all_containers" "0" "No containers found" "$duration"
         print_info "No containers found"
         return 0
     fi
     
     print_info "Found ${#container_array[@]} containers"
+    trace_log "Found ${#container_array[@]} containers to cleanup" "INFO"
     
     # Add force flag to the end
     container_array+=("$force")
     
     # Cleanup all containers
+    trace_log "Calling cleanup_multiple_containers" "DEBUG"
     cleanup_multiple_containers "${container_array[@]}"
+    local exit_code=$?
     
     # Force sync state to ensure consistency after bulk cleanup
+    trace_log "Forcing state sync after bulk cleanup" "DEBUG"
     force_sync_state_after_cleanup
+    
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "cleanup_all_containers" "$exit_code" "Cleaned up ${#container_array[@]} containers" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -373,11 +426,17 @@ cleanup_unused_images() {
     local force="${1:-false}"
     local operation="CLEANUP_IMAGES"
     
+    trace_enter "cleanup_unused_images" "force=$force" "Cleaning up unused images"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Cleaning up unused images"
     
     # Get unused images
+    trace_log "Getting unused images from Docker" "DEBUG"
     local unused_images=$(docker images --filter "dangling=true" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null)
     if [[ -z "$unused_images" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_unused_images" "0" "No unused images found" "$duration"
         print_info "No unused images found"
         return 0
     fi
@@ -390,11 +449,14 @@ cleanup_unused_images() {
     done <<< "$unused_images"
     
     if [[ ${#image_array[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "cleanup_unused_images" "0" "No unused images found" "$duration"
         print_info "No unused images found"
         return 0
     fi
     
     print_info "Found ${#image_array[@]} unused images"
+    trace_log "Found ${#image_array[@]} unused images to cleanup" "INFO"
     
     local success_count=0
     local total_count=${#image_array[@]}
@@ -407,8 +469,10 @@ cleanup_unused_images() {
             command="docker rmi -f $image"
         fi
         
+        trace_command "$command" "$operation" ""
         local output=$(execute_docker_command "$operation" "" "$command")
         local exit_code=$?
+        trace_command_result "$command" "$exit_code" "$output"
         
         if [[ $exit_code -eq 0 ]]; then
             success_count=$((success_count + 1))
@@ -416,10 +480,13 @@ cleanup_unused_images() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "cleanup_unused_images" "0" "All $total_count unused images cleaned up successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count unused images cleaned up successfully"
         print_success "All $total_count unused images cleaned up successfully"
     else
+        trace_exit "cleanup_unused_images" "0" "Cleaned up $success_count out of $total_count unused images" "$duration"
         log_operation_failure "$operation" "" "Cleaned up $success_count out of $total_count unused images"
         print_warning "Cleaned up $success_count out of $total_count unused images"
     fi
