@@ -23,10 +23,15 @@ start_container_operation() {
     local container_name="$1"
     local operation="START"
     
+    trace_enter "start_container_operation" "container_name=$container_name" "Container start operation"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name"
     
     # Check if container exists
     if ! container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_container_operation" "1" "Container does not exist" "$duration"
         log_operation_failure "$operation" "$container_name" "Container does not exist"
         print_error "Container '$container_name' does not exist"
         print_info "Use 'list' to see available containers or 'generate' to create a new one"
@@ -35,6 +40,8 @@ start_container_operation() {
     
     # Check if container is already running
     if container_is_running "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_container_operation" "0" "Container is already running" "$duration"
         log_operation_success "$operation" "$container_name" "Container is already running"
         print_success "Container '$container_name' is already running"
         
@@ -52,7 +59,6 @@ start_container_operation() {
         print_success "Container '$container_name' started successfully"
         
         # Wait for container to be ready
-        print_info "Waiting for container to be ready..."
         if wait_for_container_ready "$container_name" "$TIMEOUT" ""; then
             print_success "Container '$container_name' is ready"
         else
@@ -61,8 +67,13 @@ start_container_operation() {
         
         # Show container status
         show_container_status "$container_name"
+        
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_container_operation" "0" "Container started successfully" "$duration"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_container_operation" "1" "Failed to start container" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to start container"
         print_error "Failed to start container '$container_name'"
         return 1
@@ -88,9 +99,14 @@ start_multiple_containers() {
     local containers=("$@")
     local operation="START_MULTIPLE"
     
+    trace_enter "start_multiple_containers" "containers=${containers[*]}" "Starting multiple containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Starting multiple containers"
     
     if [[ ${#containers[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_multiple_containers" "1" "No containers specified" "$duration"
         print_error "No containers specified"
         return 1
     fi
@@ -109,10 +125,13 @@ start_multiple_containers() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "start_multiple_containers" "0" "All $total_count containers started successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count containers started successfully"
         print_success "All $total_count containers started successfully"
     else
+        trace_exit "start_multiple_containers" "0" "Started $success_count out of $total_count containers" "$duration"
         log_operation_failure "$operation" "" "Started $success_count out of $total_count containers"
         print_warning "Started $success_count out of $total_count containers"
     fi
@@ -137,11 +156,16 @@ start_multiple_containers() {
 start_all_managed_containers() {
     local operation="START_ALL"
     
+    trace_enter "start_all_managed_containers" "" "Starting all managed containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Starting all managed containers"
     
     # Get all containers from state
     local containers=$(list_containers_in_state)
     if [[ -z "$containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_all_managed_containers" "0" "No managed containers found" "$duration"
         print_info "No managed containers found"
         return 0
     fi
@@ -154,6 +178,8 @@ start_all_managed_containers() {
     done <<< "$containers"
     
     if [[ ${#container_array[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_all_managed_containers" "0" "No managed containers found" "$duration"
         print_info "No managed containers found"
         return 0
     fi
@@ -161,7 +187,11 @@ start_all_managed_containers() {
     print_info "Found ${#container_array[@]} managed containers"
     
     # Start all containers
-    start_multiple_containers "${container_array[@]}"
+    local result=$(start_multiple_containers "${container_array[@]}")
+    local exit_code=$?
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "start_all_managed_containers" "$exit_code" "Started ${#container_array[@]} managed containers" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -183,10 +213,15 @@ start_containers_from_yaml() {
     local yaml_file="$1"
     local operation="START_FROM_YAML"
     
+    trace_enter "start_containers_from_yaml" "yaml_file=$yaml_file" "Starting containers from YAML file"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Starting containers from YAML file"
     
     # Validate YAML file
     if ! validate_yaml_file "$yaml_file"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_containers_from_yaml" "1" "YAML file validation failed" "$duration"
         log_operation_failure "$operation" "" "YAML file validation failed"
         return 1
     fi
@@ -198,6 +233,8 @@ start_containers_from_yaml() {
     # Extract container names
     local containers=$(extract_container_names "$yaml_file" "$yaml_type")
     if [[ -z "$containers" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_containers_from_yaml" "1" "No containers found in YAML file" "$duration"
         log_operation_failure "$operation" "" "No containers found in YAML file"
         return 1
     fi
@@ -212,7 +249,11 @@ start_containers_from_yaml() {
     print_info "Found ${#container_array[@]} containers in YAML file"
     
     # Start containers
-    start_multiple_containers "${container_array[@]}"
+    local result=$(start_multiple_containers "${container_array[@]}")
+    local exit_code=$?
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "start_containers_from_yaml" "$exit_code" "Started ${#container_array[@]} containers from YAML" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -234,6 +275,9 @@ start_container_with_dependencies() {
     local container_name="$1"
     local operation="START_WITH_DEPS"
     
+    trace_enter "start_container_with_dependencies" "container_name=$container_name" "Starting container with dependencies"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Starting container with dependencies"
     
     # Get container dependencies from state
@@ -253,6 +297,8 @@ start_container_with_dependencies() {
         for dep in "${dep_array[@]}"; do
             print_info "Starting dependency: $dep"
             if ! start_container_operation "$dep"; then
+                local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+                trace_exit "start_container_with_dependencies" "1" "Failed to start dependency: $dep" "$duration"
                 log_operation_failure "$operation" "$container_name" "Failed to start dependency: $dep"
                 print_error "Failed to start dependency: $dep"
                 return 1
@@ -264,7 +310,11 @@ start_container_with_dependencies() {
     fi
     
     # Start the main container
-    start_container_operation "$container_name"
+    local result=$(start_container_operation "$container_name")
+    local exit_code=$?
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "start_container_with_dependencies" "$exit_code" "Container with dependencies started" "$duration"
+    return $exit_code
 }
 
 # =============================================================================
@@ -283,6 +333,9 @@ start_container_with_dependencies() {
 get_container_dependencies() {
     local container_name="$1"
     
+    trace_enter "get_container_dependencies" "container_name=$container_name" "Get container dependencies"
+    local start_time=$(date +%s.%3N)
+    
     # This is a placeholder function
     # In a real implementation, you might:
     # - Read dependencies from YAML configuration
@@ -290,6 +343,8 @@ get_container_dependencies() {
     # - Query a dependency database
     
     # For now, return empty (no dependencies)
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "get_container_dependencies" "0" "No dependencies found" "$duration"
     echo ""
 }
 
@@ -311,13 +366,20 @@ start_container_background() {
     local container_name="$1"
     local operation="START_BACKGROUND"
     
+    trace_enter "start_container_background" "container_name=$container_name" "Starting container in background"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Starting container in background"
     
     # Start container without waiting
     if start_container "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_container_background" "0" "Container started in background" "$duration"
         print_success "Container '$container_name' started in background"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "start_container_background" "1" "Failed to start container in background" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to start container in background"
         print_error "Failed to start container '$container_name' in background"
         return 1
@@ -344,6 +406,9 @@ start_container_with_options() {
     local options="$2"
     local operation="START_CUSTOM"
     
+    trace_enter "start_container_with_options" "container_name=$container_name, options=$options" "Starting container with custom options"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Starting container with custom options"
     
     # Parse options (simplified - can be extended)
@@ -366,10 +431,13 @@ start_container_with_options() {
     local output=$(execute_docker_command "$operation" "$container_name" "$command")
     local exit_code=$?
     
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $exit_code -eq 0 ]]; then
+        trace_exit "start_container_with_options" "0" "Container started with custom options" "$duration"
         print_success "Container '$container_name' started with custom options"
         return 0
     else
+        trace_exit "start_container_with_options" "$exit_code" "Failed to start container with custom options" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to start container with custom options"
         print_error "Failed to start container '$container_name' with custom options"
         return $exit_code
@@ -390,6 +458,9 @@ start_container_with_options() {
 # =============================================================================
 show_container_status() {
     local container_name="$1"
+    
+    trace_enter "show_container_status" "container_name=$container_name" "Display container status"
+    local start_time=$(date +%s.%3N)
     
     echo
     print_section "Container Status"
@@ -419,4 +490,7 @@ show_container_status() {
     fi
     
     echo
+    
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    trace_exit "show_container_status" "0" "Container status displayed" "$duration"
 } 

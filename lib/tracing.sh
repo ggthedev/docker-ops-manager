@@ -40,12 +40,12 @@ init_tracing() {
         if [[ -n "$trace_file" ]]; then
             TRACE_FILE="$trace_file"
         else
-            # Use a single trace file with date suffix in the log directory
+            # Use the same naming convention as log files: docker_ops_trace_YYYY-MM-DD.log
             local current_date=$(date '+%Y-%m-%d')
             TRACE_FILE="${DOCKER_OPS_LOG_DIR:-/tmp}/docker_ops_trace_${current_date}.log"
         fi
         
-        # Clean up old trace files to prevent disk space issues
+        # Clean up old trace files to prevent disk space issues (same retention as logs)
         cleanup_old_trace_files
         
         # Create trace file header if it doesn't exist or is empty
@@ -57,7 +57,7 @@ init_tracing() {
             echo "===================================" >> "$TRACE_FILE"
             echo "" >> "$TRACE_FILE"
         else
-            # Add session separator to existing file
+            # Add session separator to existing file (append mode)
             echo "" >> "$TRACE_FILE"
             echo "=== New Session ===" >> "$TRACE_FILE"
             echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TRACE_FILE"
@@ -67,7 +67,10 @@ init_tracing() {
             echo "" >> "$TRACE_FILE"
         fi
         
-        log_info "TRACING" "" "Tracing enabled - output to: $TRACE_FILE"
+        # Only call log_info if it's available (logging system might not be initialized yet)
+        if command -v log_info >/dev/null 2>&1; then
+            log_info "TRACING" "" "Tracing enabled - output to: $TRACE_FILE"
+        fi
     fi
 }
 
@@ -453,17 +456,20 @@ cleanup_tracing() {
         return 0
     fi
     
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')
-    
-    {
-        echo ""
-        echo "=== Session Summary ==="
-        echo "Ended: $timestamp"
-        echo "Total functions traced: ${#TRACE_STACK[@]}"
-        echo "Final depth: $TRACE_DEPTH"
-        echo "======================"
-        echo ""
-    } >> "$TRACE_FILE"
+    # Only write to trace file if it exists and is writable
+    if [[ -n "$TRACE_FILE" ]] && [[ -w "$TRACE_FILE" ]]; then
+        local timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')
+        
+        {
+            echo ""
+            echo "=== Session Summary ==="
+            echo "Ended: $timestamp"
+            echo "Total functions traced: ${#TRACE_STACK[@]}"
+            echo "Final depth: $TRACE_DEPTH"
+            echo "======================"
+            echo ""
+        } >> "$TRACE_FILE"
+    fi
     
     # Reset tracing state
     TRACE_ENABLED=false
@@ -471,18 +477,21 @@ cleanup_tracing() {
     TRACE_STACK=()
     TRACE_TIMESTAMPS=()
     
-    log_info "TRACING" "" "Tracing completed - log appended to: $TRACE_FILE"
+    # Only call log_info if it's available
+    if command -v log_info >/dev/null 2>&1; then
+        log_info "TRACING" "" "Tracing completed - log appended to: $TRACE_FILE"
+    fi
 } 
 
 # =============================================================================
 # FUNCTION: rotate_trace_file
 # =============================================================================
-# Purpose: Rotate trace file if it gets too large
+# Purpose: Check if trace file needs to be rotated to a new day
 # Inputs: None
 # Outputs: None
 # Side Effects: 
-#   - Renames current trace file if it exceeds size limit
-#   - Creates new trace file
+#   - Creates new daily trace file if date has changed
+#   - Updates TRACE_FILE variable to point to current day's file
 # Return code: 0 if successful, 1 if failed
 # Usage: Called automatically during tracing operations
 # Example: rotate_trace_file
@@ -492,24 +501,37 @@ rotate_trace_file() {
         return 0
     fi
     
-    # Check if trace file exists and is larger than 10MB
-    if [[ -f "$TRACE_FILE" ]] && [[ $(stat -f%z "$TRACE_FILE" 2>/dev/null || stat -c%s "$TRACE_FILE" 2>/dev/null || echo 0) -gt 10485760 ]]; then
-        local backup_file="${TRACE_FILE}.$(date +%Y%m%d_%H%M%S)"
-        mv "$TRACE_FILE" "$backup_file"
+    # Check if we need to rotate to a new day
+    local current_date=$(date '+%Y-%m-%d')
+    local expected_trace_file="${DOCKER_OPS_LOG_DIR:-/tmp}/docker_ops_trace_${current_date}.log"
+    
+    # If the current trace file is not for today, switch to today's file
+    if [[ "$TRACE_FILE" != "$expected_trace_file" ]]; then
+        TRACE_FILE="$expected_trace_file"
         
-        # Create new trace file header with current date
-        local current_date=$(date '+%Y-%m-%d')
-        local new_trace_file="${DOCKER_OPS_LOG_DIR:-/tmp}/docker_ops_trace_${current_date}.log"
-        TRACE_FILE="$new_trace_file"
+        # Create trace file header if it doesn't exist
+        if [[ ! -f "$TRACE_FILE" ]] || [[ ! -s "$TRACE_FILE" ]]; then
+            echo "=== Docker Ops Manager Trace Log ===" > "$TRACE_FILE"
+            echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TRACE_FILE"
+            echo "PID: $$" >> "$TRACE_FILE"
+            echo "Command: $0 $*" >> "$TRACE_FILE"
+            echo "===================================" >> "$TRACE_FILE"
+            echo "" >> "$TRACE_FILE"
+        else
+            # Add session separator to existing file
+            echo "" >> "$TRACE_FILE"
+            echo "=== New Session ===" >> "$TRACE_FILE"
+            echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TRACE_FILE"
+            echo "PID: $$" >> "$TRACE_FILE"
+            echo "Command: $0 $*" >> "$TRACE_FILE"
+            echo "===================" >> "$TRACE_FILE"
+            echo "" >> "$TRACE_FILE"
+        fi
         
-        echo "=== Docker Ops Manager Trace Log (Rotated) ===" > "$TRACE_FILE"
-        echo "Previous file: $backup_file" >> "$TRACE_FILE"
-        echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TRACE_FILE"
-        echo "PID: $$" >> "$TRACE_FILE"
-        echo "=============================================" >> "$TRACE_FILE"
-        echo "" >> "$TRACE_FILE"
-        
-        log_info "TRACING" "" "Trace file rotated: $backup_file"
+        # Only call log_info if it's available
+        if command -v log_info >/dev/null 2>&1; then
+            log_info "TRACING" "" "Switched to new daily trace file: $TRACE_FILE"
+        fi
     fi
 } 
 
@@ -527,22 +549,34 @@ rotate_trace_file() {
 # =============================================================================
 cleanup_old_trace_files() {
     # Get the maximum number of days to keep logs from config (use same as logs)
-    local max_days=$(get_config_value "log_rotation_days" 7)
+    # Use a default value if get_config_value is not available yet
+    local max_days=7
+    if command -v get_config_value >/dev/null 2>&1; then
+        max_days=$(get_config_value "log_rotation_days" 7)
+    fi
     
     # Calculate the cutoff date for files to be removed
     # Handle both Linux (date -d) and macOS (date -v) date syntax
     local cutoff_date=$(date -d "$max_days days ago" +%Y%m%d 2>/dev/null || date -v-${max_days}d +%Y%m%d 2>/dev/null)
     
     if [[ -n "$cutoff_date" ]]; then
-        # Find all trace backup files and check their dates
-        find "$DOCKER_OPS_LOG_DIR" -name "docker_ops_trace_20*.log" -type f | while read -r trace_file; do
-            # Extract date from filename (format: docker_ops_trace_YYYY-MM-DD.log)
-            local file_date=$(basename "$trace_file" | sed 's/docker_ops_trace_\([0-9]\{4\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)\.log/\1\2\3/')
-            # Remove files older than cutoff date
-            if [[ "$file_date" < "$cutoff_date" ]]; then
-                rm -f "$trace_file"
-                echo "Removed old trace file: $trace_file"
-            fi
-        done
+        # Use the log directory, defaulting to /tmp if not set
+        local log_dir="${DOCKER_OPS_LOG_DIR:-/tmp}"
+        
+        # Find all trace files and check their dates
+        if [[ -d "$log_dir" ]]; then
+            find "$log_dir" -name "docker_ops_trace_20*.log" -type f 2>/dev/null | while read -r trace_file; do
+                # Extract date from filename (format: docker_ops_trace_YYYY-MM-DD.log)
+                local file_date=$(basename "$trace_file" | sed 's/docker_ops_trace_\([0-9]\{4\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)\.log/\1\2\3/')
+                # Remove files older than cutoff date
+                if [[ "$file_date" < "$cutoff_date" ]]; then
+                    rm -f "$trace_file"
+                    # Only echo if log_info is not available
+                    if ! command -v log_info >/dev/null 2>&1; then
+                        echo "Removed old trace file: $trace_file"
+                    fi
+                fi
+            done
+        fi
     fi
 } 

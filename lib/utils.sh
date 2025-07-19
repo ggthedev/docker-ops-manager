@@ -534,6 +534,396 @@ show_progress() {
     fi
 }
 
+# Show simple dots animation
+# Displays a simple dots animation for waiting operations.
+# Uses minimal resources and provides visual feedback.
+#
+# Input:
+#   $1 - message: The message to display before the animation (optional)
+# Output: Animated dots to stdout
+# Example: show_dots_animation "Waiting for container"
+show_dots_animation() {
+    local message="${1:-}"
+    local dots=""
+    local max_dots=3
+    
+    # Print initial message if provided
+    if [[ -n "$message" ]]; then
+        printf "%s" "$message"
+    fi
+    
+    # Animate dots
+    for ((i=0; i<=max_dots; i++)); do
+        printf "\r%s%s" "$message" "$dots"
+        sleep 0.5
+        dots="${dots}."
+    done
+    
+    # Clear the line
+    printf "\r%*s\r" $(( ${#message} + max_dots + 1 )) ""
+}
+
+# Show simple dots animation only
+# Displays only animating dots for waiting operations.
+# Uses minimal resources and provides visual feedback.
+#
+# Input:
+#   $1 - max_dots: Maximum number of dots to show (optional, defaults to 3)
+# Output: Animated dots to stdout
+# Example: show_waiting_dots 3
+show_waiting_dots() {
+    local max_dots="${1:-5}"  # Default to 5 if no parameter provided
+   
+
+    # Show one cycle of dots animation
+    for ((i=0; i<=max_dots; i++)); do
+        # Clear previous dots and show current state
+        printf "\r%*s\r" $(( max_dots + 1 )) ""
+        for ((j=0; j<i; j++)); do
+            printf "."
+        done
+        sleep 0.3
+    done
+    
+    # Don't clear the line at the end - let the next cycle handle it
+    # This makes the animation more visible
+}
+
+# Global spinner index for maintaining state between calls
+# _SPINNER_INDEX=0
+
+# Show spinner animation
+# Displays a simple spinner animation for waiting operations.
+# Uses minimal resources and provides visual feedback.
+#
+# Input:
+#   $1 - message: The message to display before the spinner (optional)
+# Output: Spinner animation to stdout
+# Example: show_spinner_animation "Processing"
+# show_spinner_animation() {
+#     local message="${1:-}"
+#     local spinner_chars=("-" "\\" "|" "/")
+#     
+#     # Print initial message if provided
+#     if [[ -n "$message" ]]; then
+#         printf "%s " "$message"
+#     fi
+#     
+#     # Animate spinner
+#     printf "%s" "${spinner_chars[$_SPINNER_INDEX]}"
+#     sleep 0.2
+#     
+#     # Update spinner index for next call
+#     _SPINNER_INDEX=$(( (_SPINNER_INDEX + 1) % ${#spinner_chars[@]} ))
+#     
+#     # Clear the spinner character and move back
+#     printf "\b \b"
+# }
+
+# Show waiting animation with timeout
+# Displays a waiting animation for a specified duration.
+# Provides visual feedback during wait operations.
+#
+# Input:
+#   $1 - duration: Duration to show animation in seconds
+#   $2 - message: The message to display (optional, defaults to "Waiting")
+#   $3 - animation_type: Type of animation - "dots" or "spinner" (optional, defaults to "dots")
+# Output: Animation for the specified duration
+# Example: show_waiting_animation 10 "Waiting for container" "dots"
+show_waiting_animation() {
+    local duration="$1"
+    local message="${2:-Waiting}"
+    local animation_type="${3:-dots}"
+    local start_time=$(date +%s)
+    local end_time=$((start_time + duration))
+    
+    # Show animation until timeout
+    while [[ $(date +%s) -lt $end_time ]]; do
+        if [[ "$animation_type" == "spinner" ]]; then
+            # show_spinner_animation "$message"  # Commented out for now
+            show_dots_animation "$message"
+        else
+            show_dots_animation "$message"
+        fi
+    done
+    
+    # Clear the line when done
+    printf "\r%*s\r" $(( ${#message} + 10 )) ""
+}
+
+# Show waiting animation with condition
+# Displays a waiting animation until a condition is met or timeout occurs.
+# Provides visual feedback during wait operations with condition checking.
+#
+# Input:
+#   $1 - condition_command: Command to check condition (should return 0 when condition is met)
+#   $2 - timeout: Maximum time to wait in seconds
+#   $3 - message: The message to display (optional, defaults to "Waiting")
+#   $4 - animation_type: Type of animation - "dots" or "spinner" (optional, defaults to "dots")
+#   $5 - check_interval: Interval between condition checks in seconds (optional, defaults to 1)
+# Output: Animation until condition is met or timeout
+# Return code: 0 if condition met, 1 if timeout
+# Example: show_waiting_animation_with_condition "test -f /tmp/file" 30 "Waiting for file" "dots"
+show_waiting_animation_with_condition() {
+    local condition_command="$1"
+    local timeout="$2"
+    local message="${3:-Waiting}"
+    local animation_type="${4:-dots}"
+    local check_interval="${5:-1}"
+    local start_time=$(date +%s)
+    local end_time=$((start_time + timeout))
+    local last_check_time=0
+    
+    # Show animation until condition is met or timeout
+    while [[ $(date +%s) -lt $end_time ]]; do
+        # Check condition at specified intervals
+        local current_time=$(date +%s)
+        if [[ $((current_time - last_check_time)) -ge $check_interval ]]; then
+            if eval "$condition_command" >/dev/null 2>&1; then
+                # Clear the line when condition is met
+                printf "\r%*s\r" $(( ${#message} + 10 )) ""
+                return 0
+            fi
+            last_check_time=$current_time
+        fi
+        
+        # Show animation
+        if [[ "$animation_type" == "spinner" ]]; then
+            # show_spinner_animation "$message"  # Commented out for now
+            show_dots_animation "$message"
+        else
+            show_dots_animation "$message"
+        fi
+    done
+    
+    # Clear the line when timeout occurs
+    printf "\r%*s\r" $(( ${#message} + 10 )) ""
+    return 1
+}
+
+# =============================================================================
+# SIGNAL-BASED ANIMATION CONTROL
+# =============================================================================
+
+# Global variables for signal-based animation control
+_ANIMATION_PID=""
+_ANIMATION_RUNNING=false
+_ANIMATION_SIGNAL_RECEIVED=false
+_ANIMATION_SIGNAL_FILE=""
+
+# Signal handler for stopping animation
+# Called when SIGUSR1 is received to stop the animation
+animation_signal_handler() {
+    _ANIMATION_SIGNAL_RECEIVED=true
+    _ANIMATION_RUNNING=false
+}
+
+# Start continuous dots animation with signal control
+# Starts a background process that shows dots animation until SIGUSR1 is received
+# Uses SIGUSR1 to signal the animation to stop
+#
+# Input:
+#   $1 - dots_count: Number of dots to show in animation (optional, defaults to 3)
+# Output: None
+# Side Effects: 
+#   - Starts background animation process
+#   - Sets up signal handler for SIGUSR1
+#   - Sets _ANIMATION_PID to the background process ID
+# Example: start_signal_animation 5
+start_signal_animation() {
+    local dots_count="${1:-3}"  # Default to 3 dots if not specified
+    
+    # Clear any existing animation state
+    _ANIMATION_SIGNAL_RECEIVED=false
+    _ANIMATION_RUNNING=true
+    
+    # Create a temporary file for signaling
+    local signal_file="/tmp/docker_ops_animation_$$"
+    rm -f "$signal_file"
+    
+    # Start animation in background process
+    (
+        # Set up signal handler for this process
+        trap 'rm -f "$signal_file"; printf "\r%*s\r" $((dots_count + 1)) ""; exit 0' SIGUSR1 EXIT
+        
+        # Run animation until signal file is created or signal received
+        while [[ ! -f "$signal_file" ]]; do
+            show_waiting_dots "$dots_count"
+        done
+        
+        # Clean up and exit
+        rm -f "$signal_file"
+        printf "\r%*s\r" $((dots_count + 1)) ""
+    ) &
+    
+    _ANIMATION_PID=$!
+    _ANIMATION_SIGNAL_FILE="$signal_file"
+    log_debug "ANIMATION" "" "Started signal-based animation with PID: $_ANIMATION_PID, dots: $dots_count"
+}
+
+# Stop continuous animation via signal
+# Sends SIGUSR1 to the animation process to stop it gracefully
+#
+# Input: None
+# Output: None
+# Side Effects:
+#   - Sends SIGUSR1 to animation process
+#   - Waits for process to terminate
+#   - Clears _ANIMATION_PID
+# Example: stop_signal_animation
+stop_signal_animation() {
+    if [[ -n "$_ANIMATION_PID" ]] && kill -0 "$_ANIMATION_PID" 2>/dev/null; then
+        log_debug "ANIMATION" "" "Stopping signal-based animation (PID: $_ANIMATION_PID)"
+        
+        # Create signal file to stop animation
+        if [[ -n "$_ANIMATION_SIGNAL_FILE" ]]; then
+            touch "$_ANIMATION_SIGNAL_FILE" 2>/dev/null
+        fi
+        
+        # Also send SIGUSR1 as backup
+        kill -SIGUSR1 "$_ANIMATION_PID" 2>/dev/null
+        
+        # Wait for process to terminate (with timeout)
+        local wait_time=0
+        local max_wait=3
+        while [[ $wait_time -lt $max_wait ]] && kill -0 "$_ANIMATION_PID" 2>/dev/null; do
+            sleep 0.1
+            wait_time=$((wait_time + 1))
+        done
+        
+        # Force kill if still running
+        if kill -0 "$_ANIMATION_PID" 2>/dev/null; then
+            log_debug "ANIMATION" "" "Force killing animation process (PID: $_ANIMATION_PID)"
+            kill -9 "$_ANIMATION_PID" 2>/dev/null
+        fi
+        
+        # Wait for process to be reaped
+        wait "$_ANIMATION_PID" 2>/dev/null || true
+        
+        # Clean up signal file
+        if [[ -n "$_ANIMATION_SIGNAL_FILE" ]]; then
+            rm -f "$_ANIMATION_SIGNAL_FILE" 2>/dev/null
+        fi
+        
+        _ANIMATION_PID=""
+        _ANIMATION_RUNNING=false
+        _ANIMATION_SIGNAL_RECEIVED=false
+        _ANIMATION_SIGNAL_FILE=""
+        
+        log_debug "ANIMATION" "" "Signal-based animation stopped"
+    fi
+}
+
+# Check if animation is currently running
+# Returns true if animation process is active
+#
+# Input: None
+# Output: None
+# Return code: 0 if animation is running, 1 if not
+# Example: if is_animation_running; then echo "Animation active"; fi
+is_animation_running() {
+    [[ -n "$_ANIMATION_PID" ]] && kill -0 "$_ANIMATION_PID" 2>/dev/null
+}
+
+# Cleanup animation resources
+# Ensures any running animation is stopped and resources are cleaned up
+# Should be called on script exit or error conditions
+#
+# Input: None
+# Output: None
+# Side Effects: Stops any running animation and clears state
+# Example: cleanup_animation
+cleanup_animation() {
+    # Always try to stop animation, even if we're not sure it's running
+    if [[ -n "$_ANIMATION_PID" ]]; then
+        log_debug "ANIMATION" "" "Cleaning up animation resources (PID: $_ANIMATION_PID)"
+        
+        # Try graceful stop first
+        kill -SIGUSR1 "$_ANIMATION_PID" 2>/dev/null
+        
+        # Wait briefly for graceful termination
+        local wait_time=0
+        local max_wait=2
+        while [[ $wait_time -lt $max_wait ]] && kill -0 "$_ANIMATION_PID" 2>/dev/null; do
+            sleep 0.1
+            wait_time=$((wait_time + 1))
+        done
+        
+        # Force kill if still running
+        if kill -0 "$_ANIMATION_PID" 2>/dev/null; then
+            log_debug "ANIMATION" "" "Force killing animation process (PID: $_ANIMATION_PID)"
+            kill -9 "$_ANIMATION_PID" 2>/dev/null
+        fi
+        
+        # Wait for process to be reaped
+        wait "$_ANIMATION_PID" 2>/dev/null || true
+        
+        # Clear state
+        _ANIMATION_PID=""
+        _ANIMATION_RUNNING=false
+        _ANIMATION_SIGNAL_RECEIVED=false
+        _ANIMATION_SIGNAL_FILE=""
+        
+        log_debug "ANIMATION" "" "Animation cleanup completed"
+    fi
+    
+    # Also kill any orphaned animation processes that might be running
+    # Look for background processes that might be animation processes
+    local orphaned_pids=$(ps aux | grep -E "show_waiting_dots|animation" | grep -v grep | awk '{print $2}' 2>/dev/null || true)
+    if [[ -n "$orphaned_pids" ]]; then
+        log_debug "ANIMATION" "" "Killing orphaned animation processes: $orphaned_pids"
+        echo "$orphaned_pids" | xargs -r kill -9 2>/dev/null || true
+    fi
+    
+    # Clean up any orphaned signal files
+    rm -f /tmp/docker_ops_animation_* 2>/dev/null || true
+}
+
+# Wait with signal-based animation
+# Waits for a condition to be met while showing continuous animation
+# Uses signal-based animation control for efficient operation
+#
+# Input:
+#   $1 - condition_command: Command to check condition (should return 0 when condition is met)
+#   $2 - timeout: Maximum time to wait in seconds
+#   $3 - check_interval: Interval between condition checks in seconds (optional, defaults to 1)
+#   $4 - dots_count: Number of dots to show in animation (optional, defaults to 3)
+# Output: None
+# Return code: 0 if condition met, 1 if timeout
+# Example: wait_with_signal_animation "test -f /tmp/file" 30 1 5
+wait_with_signal_animation() {
+    local condition_command="$1"
+    local timeout="$2"
+    local check_interval="${3:-1}"
+    local dots_count="${4:-3}"
+    local start_time=$(date +%s)
+    local end_time=$((start_time + timeout))
+    local last_check_time=0
+    
+    # Start signal-based animation with specified dots
+    start_signal_animation "$dots_count"
+    
+    # Wait for condition or timeout
+    while [[ $(date +%s) -lt $end_time ]]; do
+        # Check condition at specified intervals
+        local current_time=$(date +%s)
+        if [[ $((current_time - last_check_time)) -ge $check_interval ]]; then
+            if eval "$condition_command" >/dev/null 2>&1; then
+                stop_signal_animation
+                return 0
+            fi
+            last_check_time=$current_time
+        fi
+        
+        # Small sleep to prevent busy waiting
+        sleep 0.1
+    done
+    
+    # Timeout reached
+    stop_signal_animation
+    return 1
+}
+
 # Check if string contains substring
 # Tests whether a string contains a specific substring.
 # Case-sensitive comparison.
@@ -833,6 +1223,9 @@ wait_for_system_ready() {
             return 0
         fi
         
+        # Show static waiting message with animating dots
+        show_waiting_dots "Waiting for completion"
+        
         sleep "$check_interval"
     done
     
@@ -903,54 +1296,4 @@ send_notification() {
     fi
 }
 
-# Print help text
-# Displays comprehensive help information for the Docker Ops Manager.
-# Shows usage, operations, options, examples, and environment variables.
-#
-# Input: None
-# Output: Help text to stdout
-# Example: print_help
-print_help() {
-    cat << EOF
-Docker Ops Manager - A comprehensive Docker operations management tool
-
-Usage: $0 [OPERATION] [OPTIONS] [CONTAINER_NAME]
-
-Operations:
-  generate <yaml_file> [container_name]  Generate container from YAML file
-  install [container_name]                Install/update container
-  reinstall [container_name]              Reinstall container
-  start|run [container_name]              Start container
-  stop [container_name]                   Stop container
-  restart [container_name]                Restart container
-  cleanup [container_name] [--all]        Remove containers/images
-  status [container_name]                 Show container status
-  logs [container_name]                   Show container logs
-  list                                    List managed containers
-  config                                  Show configuration
-  state                                   Show state summary
-  help                                    Show this help
-
-Options:
-  --yaml <file>                          Specify YAML file
-  --force                                Force operation
-  --timeout <seconds>                    Operation timeout
-  --log-level <level>                    Set log level (DEBUG, INFO, WARN, ERROR)
-
-Examples:
-  $0 generate docker-compose.yml my-app
-  $0 start my-app
-  $0 stop
-  $0 cleanup --all
-  $0 status
-
-Environment Variables:
-  DOCKER_OPS_CONFIG_DIR                  Configuration directory
-  DOCKER_OPS_LOG_DIR                     Log directory
-  DOCKER_OPS_LOG_LEVEL                   Log level
-  DOCKER_OPS_STATE_FILE                  State file path
-  DOCKER_OPS_PROJECT_NAME_PATTERN        Project name pattern for auto-generation
-
-For more information, see the documentation.
-EOF
-} 
+ 

@@ -21,7 +21,7 @@ rm -f ~/.config/docker-ops-manager/logs/docker_ops_trace.log*
 echo ""
 echo "Test 1: First trace session"
 echo "----------------------------"
-./docker_ops_manager.sh generate --yaml ./examples/nginx-app.yml --trace
+./docker_mgr.sh generate --yaml ./examples/nginx-app.yml --trace
 
 # Check trace file
 echo ""
@@ -40,7 +40,7 @@ fi
 echo ""
 echo "Test 2: Second trace session"
 echo "----------------------------"
-./docker_ops_manager.sh status --trace
+./docker_mgr.sh status --trace
 
 # Check trace file again
 echo ""
@@ -60,7 +60,7 @@ fi
 echo ""
 echo "Test 3: Third trace session"
 echo "----------------------------"
-./docker_ops_manager.sh cleanup --all --trace
+./docker_mgr.sh cleanup --all --trace
 
 # Final verification
 echo ""

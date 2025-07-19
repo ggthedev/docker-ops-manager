@@ -470,11 +470,12 @@ extract_volumes() {
 #   $2 - container_name: The name of the container
 #   $3 - yaml_type: The type of YAML file
 # Output: Complete docker run command string
-# Example: generate_docker_run_command "docker-compose.yml" "web" "docker-compose"
+# Example: generate_docker_run_command "docker-compose.yml" "web" "docker-compose" "false"
 generate_docker_run_command() {
     local yaml_file="$1"
     local container_name="$2"
     local yaml_type="$3"
+    local no_start="${4:-false}"
     
     # Get the container configuration from YAML
     local container_config=$(get_container_config "$yaml_file" "$container_name" "$yaml_type")
@@ -491,7 +492,14 @@ generate_docker_run_command() {
     fi
     
     # Start building the docker run command
-    local docker_cmd="docker run -d --name $container_name"
+    local docker_cmd=""
+    if [[ "$no_start" == "true" ]]; then
+        # Create container without starting it
+        docker_cmd="docker create --name $container_name"
+    else
+        # Create and start container
+        docker_cmd="docker run -d --name $container_name"
+    fi
     
     # Add port mappings
     local ports=$(extract_ports "$container_config")

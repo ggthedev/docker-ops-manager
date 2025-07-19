@@ -23,10 +23,15 @@ install_container() {
     local container_name="$1"
     local operation="INSTALL"
     
+    trace_enter "install_container" "container_name=$container_name" "Container installation"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Installing container"
     
     # Check if container exists
     if container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container" "1" "Container already exists" "$duration"
         log_operation_failure "$operation" "$container_name" "Container already exists"
         print_error "Container '$container_name' already exists"
         print_info "Use 'reinstall' to update the container"
@@ -34,8 +39,11 @@ install_container() {
     fi
     
     # Get container information from state
+    trace_log "Getting container operation record from state" "DEBUG"
     local operation_record=$(get_container_operation_record "$container_name")
     if [[ -z "$operation_record" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container" "1" "No container information found in state" "$duration"
         log_operation_failure "$operation" "$container_name" "No container information found in state"
         print_error "No information found for container '$container_name'"
         print_info "Use 'generate' to create a new container from YAML"
@@ -43,10 +51,13 @@ install_container() {
     fi
     
     # Extract information from state
+    trace_log "Extracting YAML source from operation record" "DEBUG"
     local yaml_source=$(echo "$operation_record" | jq -r '.yaml_source')
     local last_operation=$(echo "$operation_record" | jq -r '.last_operation')
     
     if [[ -z "$yaml_source" || "$yaml_source" == "null" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container" "1" "No YAML source found in state" "$duration"
         log_operation_failure "$operation" "$container_name" "No YAML source found in state"
         print_error "No YAML source found for container '$container_name'"
         return 1
@@ -63,10 +74,14 @@ install_container() {
     local exit_code=$?
     
     if [[ $exit_code -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container" "0" "Container installed successfully" "$duration"
         log_operation_success "$operation" "$container_name" "Container installed successfully"
         print_success "Container '$container_name' installed successfully"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container" "$exit_code" "Failed to install container" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to install container"
         return $exit_code
     fi
@@ -92,10 +107,15 @@ reinstall_container() {
     local container_name="$1"
     local operation="REINSTALL"
     
+    trace_enter "reinstall_container" "container_name=$container_name" "Container reinstallation"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Reinstalling container"
     
     # Check if container exists
     if ! container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "reinstall_container" "1" "Container does not exist" "$duration"
         log_operation_failure "$operation" "$container_name" "Container does not exist"
         print_error "Container '$container_name' does not exist"
         print_info "Use 'install' to create a new container"
@@ -103,18 +123,24 @@ reinstall_container() {
     fi
     
     # Get container information from state
+    trace_log "Getting container operation record from state" "DEBUG"
     local operation_record=$(get_container_operation_record "$container_name")
     if [[ -z "$operation_record" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "reinstall_container" "1" "No container information found in state" "$duration"
         log_operation_failure "$operation" "$container_name" "No container information found in state"
         print_error "No information found for container '$container_name'"
         return 1
     fi
     
     # Extract information from state
+    trace_log "Extracting YAML source from operation record" "DEBUG"
     local yaml_source=$(echo "$operation_record" | jq -r '.yaml_source')
     local container_id=$(echo "$operation_record" | jq -r '.container_id')
     
     if [[ -z "$yaml_source" || "$yaml_source" == "null" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "reinstall_container" "1" "No YAML source found in state" "$duration"
         log_operation_failure "$operation" "$container_name" "No YAML source found in state"
         print_error "No YAML source found for container '$container_name'"
         return 1
@@ -141,10 +167,14 @@ reinstall_container() {
     local exit_code=$?
     
     if [[ $exit_code -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "reinstall_container" "0" "Container reinstalled successfully" "$duration"
         log_operation_success "$operation" "$container_name" "Container reinstalled successfully"
         print_success "Container '$container_name' reinstalled successfully"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "reinstall_container" "$exit_code" "Failed to reinstall container" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to reinstall container"
         return $exit_code
     fi
@@ -171,32 +201,45 @@ update_container_image() {
     local container_name="$1"
     local operation="UPDATE_IMAGE"
     
+    trace_enter "update_container_image" "container_name=$container_name" "Container image update"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Updating container image"
     
     # Check if container exists
     if ! container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container_image" "1" "Container does not exist" "$duration"
         log_operation_failure "$operation" "$container_name" "Container does not exist"
         print_error "Container '$container_name' does not exist"
         return 1
     fi
     
     # Get current image
+    trace_log "Getting current container image" "DEBUG"
     local current_image=$(get_container_image "$container_name")
     if [[ -z "$current_image" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container_image" "1" "Could not get current image" "$duration"
         log_operation_failure "$operation" "$container_name" "Could not get current image"
         print_error "Could not get current image for container '$container_name'"
         return 1
     fi
     
     print_info "Current image: $current_image"
+    trace_log "Current image: $current_image" "INFO"
     
     # Pull latest image
     print_info "Pulling latest image..."
+    trace_command "docker pull $current_image" "$operation" "$container_name"
     local pull_command="docker pull $current_image"
     local output=$(execute_docker_command "$operation" "$container_name" "$pull_command" 300)
     local exit_code=$?
+    trace_command_result "$pull_command" "$exit_code" "$output"
     
     if [[ $exit_code -ne 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container_image" "$exit_code" "Failed to pull latest image" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to pull latest image"
         print_error "Failed to pull latest image"
         return $exit_code
@@ -256,10 +299,14 @@ update_container_image() {
             start_container "$container_name"
         fi
         
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container_image" "0" "Container image updated successfully" "$duration"
         log_operation_success "$operation" "$container_name" "Container image updated successfully"
         print_success "Container '$container_name' image updated successfully"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container_image" "$exit_code" "Failed to update container image" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to update container image"
         return $exit_code
     fi
@@ -288,16 +335,23 @@ install_container_from_image() {
     local docker_run_cmd="$3"
     local operation="INSTALL_FROM_IMAGE"
     
+    trace_enter "install_container_from_image" "container_name=$container_name, image_name=$image_name" "Container installation from image"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "$container_name" "Installing container from image"
     
     # Validate inputs
     if [[ -z "$container_name" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container_from_image" "1" "Container name is required" "$duration"
         log_operation_failure "$operation" "" "Container name is required"
         print_error "Container name is required"
         return 1
     fi
     
     if [[ -z "$image_name" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container_from_image" "1" "Image name is required" "$duration"
         log_operation_failure "$operation" "$container_name" "Image name is required"
         print_error "Image name is required"
         return 1
@@ -327,10 +381,14 @@ install_container_from_image() {
     
     local exit_code=$?
     if [[ $exit_code -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container_from_image" "0" "Container installed from image successfully" "$duration"
         log_operation_success "$operation" "$container_name" "Container installed from image successfully"
         print_success "Container '$container_name' installed from image successfully"
         return 0
     else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_container_from_image" "$exit_code" "Failed to install container from image" "$duration"
         log_operation_failure "$operation" "$container_name" "Failed to install container from image"
         return $exit_code
     fi
@@ -355,9 +413,14 @@ install_multiple_containers() {
     local containers=("$@")
     local operation="INSTALL_MULTIPLE"
     
+    trace_enter "install_multiple_containers" "containers=${containers[*]}" "Installing multiple containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Installing multiple containers"
     
     if [[ ${#containers[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "install_multiple_containers" "1" "No containers specified" "$duration"
         print_error "No containers specified"
         return 1
     fi
@@ -376,10 +439,13 @@ install_multiple_containers() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "install_multiple_containers" "0" "All $total_count containers installed successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count containers installed successfully"
         print_success "All $total_count containers installed successfully"
     else
+        trace_exit "install_multiple_containers" "0" "Installed $success_count out of $total_count containers" "$duration"
         log_operation_failure "$operation" "" "Installed $success_count out of $total_count containers"
         print_warning "Installed $success_count out of $total_count containers"
     fi
@@ -406,9 +472,14 @@ reinstall_multiple_containers() {
     local containers=("$@")
     local operation="REINSTALL_MULTIPLE"
     
+    trace_enter "reinstall_multiple_containers" "containers=${containers[*]}" "Reinstalling multiple containers"
+    local start_time=$(date +%s.%3N)
+    
     log_operation_start "$operation" "" "Reinstalling multiple containers"
     
     if [[ ${#containers[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "reinstall_multiple_containers" "1" "No containers specified" "$duration"
         print_error "No containers specified"
         return 1
     fi
@@ -427,12 +498,176 @@ reinstall_multiple_containers() {
     done
     
     # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
     if [[ $success_count -eq $total_count ]]; then
+        trace_exit "reinstall_multiple_containers" "0" "All $total_count containers reinstalled successfully" "$duration"
         log_operation_success "$operation" "" "All $total_count containers reinstalled successfully"
         print_success "All $total_count containers reinstalled successfully"
     else
+        trace_exit "reinstall_multiple_containers" "0" "Reinstalled $success_count out of $total_count containers" "$duration"
         log_operation_failure "$operation" "" "Reinstalled $success_count out of $total_count containers"
         print_warning "Reinstalled $success_count out of $total_count containers"
+    fi
+    
+    return 0
+}
+
+# =============================================================================
+# FUNCTION: update_container
+# =============================================================================
+# Purpose: Update a container by stopping if needed, deleting container/image, regenerating image/container
+# Inputs: 
+#   $1 - container_name: Name of the container to update
+# Outputs: None
+# Side Effects: 
+#   - Stops container if running
+#   - Removes existing container and image
+#   - Retrieves YAML source from state
+#   - Regenerates container from YAML
+#   - Updates state with update results
+# Return code: 0 if successful, 1 if failed
+# Usage: Called by main script when "update" or "refresh" operation is requested
+# Example: update_container "my-app"
+# =============================================================================
+update_container() {
+    local container_name="$1"
+    local operation="UPDATE"
+    
+    trace_enter "update_container" "container_name=$container_name" "Container update"
+    local start_time=$(date +%s.%3N)
+    
+    log_operation_start "$operation" "$container_name" "Updating container"
+    
+    # Check if container exists
+    if ! container_exists "$container_name"; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container" "1" "Container does not exist" "$duration"
+        log_operation_failure "$operation" "$container_name" "Container does not exist"
+        print_error "Container '$container_name' does not exist"
+        print_info "Use 'generate' to create a new container from YAML"
+        return 1
+    fi
+    
+    # Get container information from state
+    trace_log "Getting container operation record from state" "DEBUG"
+    local operation_record=$(get_container_operation_record "$container_name")
+    if [[ -z "$operation_record" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container" "1" "No container information found in state" "$duration"
+        log_operation_failure "$operation" "$container_name" "No container information found in state"
+        print_error "No information found for container '$container_name'"
+        return 1
+    fi
+    
+    # Extract information from state
+    trace_log "Extracting YAML source from operation record" "DEBUG"
+    local yaml_source=$(echo "$operation_record" | jq -r '.yaml_source')
+    local container_id=$(echo "$operation_record" | jq -r '.container_id')
+    
+    if [[ -z "$yaml_source" || "$yaml_source" == "null" ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container" "1" "No YAML source found in state" "$duration"
+        log_operation_failure "$operation" "$container_name" "No YAML source found in state"
+        print_error "No YAML source found for container '$container_name'"
+        return 1
+    fi
+    
+    # Validate YAML file
+    if ! validate_file_path "$yaml_source" "YAML source file"; then
+        return 1
+    fi
+    
+    # Stop container if running
+    if container_is_running "$container_name"; then
+        print_info "Stopping running container..."
+        stop_container "$container_name"
+    fi
+    
+    # Remove existing container
+    print_info "Removing existing container..."
+    remove_container "$container_name" "true"
+    
+    # Remove associated image if it exists
+    local current_image=$(get_container_image "$container_name")
+    if [[ -n "$current_image" ]]; then
+        print_info "Removing associated image: $current_image"
+        local remove_image_cmd="docker rmi $current_image"
+        execute_docker_command "$operation" "$container_name" "$remove_image_cmd" 60
+    fi
+    
+    # Regenerate container from YAML
+    print_info "Regenerating container from: $yaml_source"
+    generate_from_yaml "$yaml_source" "$container_name"
+    local exit_code=$?
+    
+    if [[ $exit_code -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container" "0" "Container updated successfully" "$duration"
+        log_operation_success "$operation" "$container_name" "Container updated successfully"
+        print_success "Container '$container_name' updated successfully"
+        return 0
+    else
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_container" "$exit_code" "Failed to update container" "$duration"
+        log_operation_failure "$operation" "$container_name" "Failed to update container"
+        return $exit_code
+    fi
+}
+
+# =============================================================================
+# FUNCTION: update_multiple_containers
+# =============================================================================
+# Purpose: Update multiple containers in sequence
+# Inputs: 
+#   $@ - containers: Array of container names to update
+# Outputs: None
+# Side Effects: 
+#   - Updates each container in the provided list
+#   - Provides summary of update results
+#   - Continues update even if some containers fail
+# Return code: 0 if successful, 1 if failed
+# Usage: Called to update multiple containers at once
+# Example: update_multiple_containers "web" "db" "cache"
+# =============================================================================
+update_multiple_containers() {
+    local containers=("$@")
+    local operation="UPDATE_MULTIPLE"
+    
+    trace_enter "update_multiple_containers" "containers=${containers[*]}" "Updating multiple containers"
+    local start_time=$(date +%s.%3N)
+    
+    log_operation_start "$operation" "" "Updating multiple containers"
+    
+    if [[ ${#containers[@]} -eq 0 ]]; then
+        local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+        trace_exit "update_multiple_containers" "1" "No containers specified" "$duration"
+        print_error "No containers specified"
+        return 1
+    fi
+    
+    local success_count=0
+    local total_count=${#containers[@]}
+    
+    print_info "Updating $total_count containers..."
+    
+    for container_name in "${containers[@]}"; do
+        print_info "Updating container: $container_name"
+        
+        if update_container "$container_name"; then
+            success_count=$((success_count + 1))
+        fi
+    done
+    
+    # Summary
+    local duration=$(echo "$(date +%s.%3N) - $start_time" | bc -l 2>/dev/null || echo "0")
+    if [[ $success_count -eq $total_count ]]; then
+        trace_exit "update_multiple_containers" "0" "All $total_count containers updated successfully" "$duration"
+        log_operation_success "$operation" "" "All $total_count containers updated successfully"
+        print_success "All $total_count containers updated successfully"
+    else
+        trace_exit "update_multiple_containers" "0" "Updated $success_count out of $total_count containers" "$duration"
+        log_operation_failure "$operation" "" "Updated $success_count out of $total_count containers"
+        print_warning "Updated $success_count out of $total_count containers"
     fi
     
     return 0

@@ -90,6 +90,8 @@ show_container_status() {
         local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
         if [[ -n "$health_status" && "$health_status" != "<nil>" ]]; then
             echo "  Health: $health_status"
+        else
+            echo "  Health: No health check configured 🐳✨"
         fi
     fi
     
@@ -331,7 +333,7 @@ show_container_health() {
     local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
     
     if [[ -z "$health_status" || "$health_status" == "<nil>" ]]; then
-        print_info "Container '$container_name' has no health check configured"
+        print_info "Container '$container_name' is ready, but no provision for health check!!! 🐳✨"
         return 0
     fi
     

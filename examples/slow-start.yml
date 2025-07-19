@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  slow-app:
+    image: nginx:alpine
+    container_name: slow-start-test
+    ports:
+      - "8082:80"
+    restart: unless-stopped
+    command: ["sh", "-c", "sleep 10 && nginx -g 'daemon off;'"]
+    # This will take 10 seconds to start, giving us time to see the animation 

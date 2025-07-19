@@ -22,6 +22,7 @@ Timeout for readiness is determined in the following order:
 - If a container defines a healthcheck, readiness waits for the health status to become `healthy`.
 - If no healthcheck is defined, readiness waits for the container to be in the `running` state.
 - The timeout is checked every second until the container is ready or the timeout is reached.
+- **Health Check Handling**: The system gracefully handles containers without health checks by detecting template parsing errors and treating them as containers without health checks.
 
 ---
 
@@ -59,6 +60,7 @@ export DOCKER_OPS_READINESS_TIMEOUT=120
 
 - The `wait_for_container_ready` function in `lib/container_ops.sh` implements this logic.
 - It uses a helper (`get_container_readiness_timeout`) to extract per-container values from YAML.
+- **Health Check Detection**: The system tests if a container has health checks before attempting to read the health status, preventing template parsing errors.
 - All logic is exhaustively documented in the code for future maintainers and knowledge base generation.
 
 ---
@@ -67,10 +69,5 @@ export DOCKER_OPS_READINESS_TIMEOUT=120
 
 - **Flexibility:** Supports a wide range of container startup times.
 - **Transparency:** All config options are documented and discoverable.
-- **Extensibility:** Easy to add new config sources or logic in the future.
-
----
-
-## See Also
-- [Main README](../README.md)
-- [lib/container_ops.sh](../lib/container_ops.sh) 
+- **Robustness:** Handles containers with and without health checks gracefully.
+- **Animation Integration:** Uses signal-based animation control for smooth user experience during wait operations. 
