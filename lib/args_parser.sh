@@ -96,6 +96,24 @@ parse_arguments() {
                 NO_START=true
                 i=$((i+1))
                 ;;
+            --image)
+                if [[ $((i+1)) -lt ${#args[@]} ]]; then
+                    IMAGE_NAME="${args[$((i+1))]}"
+                    i=$((i+2))
+                else
+                    print_error "Missing value for --image option"
+                    exit 1
+                fi
+                ;;
+            --container-name)
+                if [[ $((i+1)) -lt ${#args[@]} ]]; then
+                    CONTAINER_NAME_FROM_FLAG="${args[$((i+1))]}"
+                    i=$((i+2))
+                else
+                    print_error "Missing value for --container-name option"
+                    exit 1
+                fi
+                ;;
             --timeout|-t)
                 if [[ $((i+1)) -lt ${#args[@]} ]]; then
                     TIMEOUT="${args[$((i+1))]}"
@@ -310,9 +328,10 @@ print_command_help() {
     
     case "$command" in
         generate|g)
-            echo "Usage: ./docker_mgr.sh generate [options] YAML_FILE [CONTAINER_NAME]"
+            echo "Usage: ./docker_mgr.sh generate [options] [YAML_FILE] [CONTAINER_NAME]"
             echo
-            echo "Generate containers from YAML files. Creates image and container but does not start it."
+            echo "Generate containers from YAML files or existing Docker images."
+            echo "When no arguments provided, shows interactive menu for configuration."
             echo
             echo "Arguments:"
             echo "  YAML_FILE        Path to YAML file (docker-compose.yml, app.yml, etc.)"
@@ -320,6 +339,8 @@ print_command_help() {
             echo
             echo "Options:"
             echo "  -y, --yaml YAML_FILE    Specify YAML file (alternative to positional argument)"
+            echo "  --image IMAGE_NAME      Generate from existing Docker image"
+            echo "  --container-name NAME   Specify container name for image generation"
             echo "  -t, --timeout SECONDS   Operation timeout (default: 60)"
             echo "  -f, --force             Force operation, overwrite existing containers"
             echo "  --no-start              Create container without starting it"
@@ -327,10 +348,22 @@ print_command_help() {
             echo "  -T, --trace             Enable detailed method tracing"
             echo
             echo "Examples:"
+            echo "  # Interactive menu (no arguments)"
+            echo "  ./docker_mgr.sh generate"
+            echo "  ./docker_mgr.sh -g"
+            echo
+            echo "  # Generate from YAML file"
             echo "  ./docker_mgr.sh generate docker-compose.yml"
             echo "  ./docker_mgr.sh -g docker-compose.yml"
             echo "  ./docker_mgr.sh generate app.yml my-app"
+            echo
+            echo "  # Generate from existing image"
+            echo "  ./docker_mgr.sh generate --image nginx:latest"
+            echo "  ./docker_mgr.sh generate --image nginx:latest --container-name my-nginx"
+            echo
+            echo "  # Advanced options"
             echo "  ./docker_mgr.sh generate docker-compose.yml --no-start"
+            echo "  ./docker_mgr.sh generate --image nginx:latest --no-start"
             ;;
         install|i)
             echo "Usage: ./docker_mgr.sh install [options] [CONTAINER_NAME...]"

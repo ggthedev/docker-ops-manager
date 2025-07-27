@@ -41,6 +41,18 @@ LOG_LEVEL=""
 TRACE_ENABLED=false
 NO_START=false      # Flag to create container without starting it
 
+# Global variables for interactive menu system
+IMAGE_NAME=""
+CONTAINER_NAME_FROM_FLAG=""
+PORT_MAPPING=""
+VOLUME_MAPPING=""
+ENV_VARS=""
+NETWORK_NAME=""
+RESOURCE_LIMITS=""
+DOCKERFILE_PATH=""
+BUILD_CONTEXT=""
+BUILD_IMAGE_NAME=""
+
 # =============================================================================
 # FUNCTION: initialize_system
 # =============================================================================
@@ -197,6 +209,20 @@ route_operation() {
 # Usage: Called by route_operation when operation is "generate"
 # =============================================================================
 handle_generate() {
+    # Check if we have command line arguments or should show interactive menu
+    if [[ ${#YAML_FILES[@]} -eq 0 && -z "$IMAGE_NAME" ]]; then
+        # No arguments provided - show interactive menu
+        handle_interactive_generate
+        return
+    fi
+    
+    # Handle command line arguments
+    if [[ ${#YAML_FILES[@]} -eq 0 && -n "$IMAGE_NAME" ]]; then
+        # Generate from image
+        handle_image_generation
+        return
+    fi
+    
     if [[ ${#YAML_FILES[@]} -eq 0 ]]; then
         print_error "YAML file is required for generate operation"
         print_info "Use --yaml <file> or provide as first argument"
@@ -273,6 +299,465 @@ handle_generate() {
             print_warning "Processed $success_count out of $total_count YAML files successfully"
         fi
     fi
+}
+
+# =============================================================================
+# FUNCTION: handle_interactive_generate
+# =============================================================================
+# Purpose: Handle interactive menu-driven container generation
+# Inputs: None (uses global variables for menu system)
+# Outputs: None
+# Side Effects: 
+#   - Shows interactive menus for configuration
+#   - Calls appropriate generation functions
+# Usage: Called by handle_generate when no arguments provided
+# =============================================================================
+handle_interactive_generate() {
+    local menu_choice=""
+    local configuration_complete=false
+    local image_selected=false
+    local yaml_selected=false
+    local dockerfile_selected=false
+    
+    # Initialize configuration
+    YAML_FILES=()
+    IMAGE_NAME=""
+    CONTAINER_NAME_FROM_FLAG=""
+    PORT_MAPPING=""
+    VOLUME_MAPPING=""
+    ENV_VARS=""
+    NETWORK_NAME=""
+    RESOURCE_LIMITS=""
+    DOCKERFILE_PATH=""
+    BUILD_CONTEXT=""
+    BUILD_IMAGE_NAME=""
+    
+    while [[ "$configuration_complete" == "false" ]]; do
+        show_generate_menu
+        read -r menu_choice
+        
+        case "$menu_choice" in
+            1)  # Generate from YAML file
+                if show_yaml_generation_menu; then
+                    yaml_selected=true
+                    image_selected=false
+                    print_success "YAML file selected: ${YAML_FILES[0]}"
+                fi
+                ;;
+            2)  # Generate from existing image
+                if show_image_generation_menu; then
+                    image_selected=true
+                    yaml_selected=false
+                    dockerfile_selected=false
+                    print_success "Image selected: $IMAGE_NAME"
+                fi
+                ;;
+            3)  # Build from Dockerfile
+                if show_dockerfile_build_menu; then
+                    dockerfile_selected=true
+                    image_selected=false
+                    yaml_selected=false
+                    print_success "Dockerfile selected: $DOCKERFILE_PATH"
+                    print_info "Build context: $BUILD_CONTEXT"
+                fi
+                ;;
+            4)  # Configure port mapping
+                if show_port_mapping_menu; then
+                    if [[ -n "$PORT_MAPPING" ]]; then
+                        print_success "Port mapping configured: $PORT_MAPPING"
+                    else
+                        print_info "Port mapping disabled"
+                    fi
+                fi
+                ;;
+            5)  # Configure volume mounting
+                if show_volume_mapping_menu; then
+                    if [[ -n "$VOLUME_MAPPING" ]]; then
+                        print_success "Volume mapping configured: $VOLUME_MAPPING"
+                    else
+                        print_info "Volume mapping disabled"
+                    fi
+                fi
+                ;;
+            6)  # Configure environment variables
+                if show_environment_menu; then
+                    if [[ -n "$ENV_VARS" ]]; then
+                        print_success "Environment variables configured: $ENV_VARS"
+                    else
+                        print_info "Environment variables disabled"
+                    fi
+                fi
+                ;;
+            7)  # Configure custom network
+                if show_network_menu; then
+                    if [[ -n "$NETWORK_NAME" ]]; then
+                        print_success "Network configured: $NETWORK_NAME"
+                    else
+                        print_info "Using default bridge network"
+                    fi
+                fi
+                ;;
+            8)  # Configure resource limits
+                if show_resource_menu; then
+                    if [[ -n "$RESOURCE_LIMITS" ]]; then
+                        print_success "Resource limits configured: $RESOURCE_LIMITS"
+                    else
+                        print_info "No resource limits set"
+                    fi
+                fi
+                ;;
+            9)  # Build only (no run)
+                if [[ "$dockerfile_selected" == "true" ]]; then
+                    if show_build_confirmation; then
+                        handle_build_only
+                        configuration_complete=true
+                    fi
+                elif [[ "$image_selected" == "true" ]]; then
+                    if show_image_build_confirmation; then
+                        handle_image_build_only
+                        configuration_complete=true
+                    fi
+                else
+                    print_error "Please select a Dockerfile (option 3) or image (option 2) first for build-only operation"
+                    sleep 2
+                fi
+                ;;
+            10)  # Generate container with current configuration
+                if [[ "$image_selected" == "true" ]]; then
+                    # Generate from image
+                    if get_container_name; then
+                        if show_generation_confirmation; then
+                            handle_image_generation
+                            configuration_complete=true
+                        fi
+                    fi
+                elif [[ "$yaml_selected" == "true" ]]; then
+                    # Generate from YAML
+                    if get_container_name; then
+                        if show_generation_confirmation; then
+                            local yaml_file="${YAML_FILES[0]}"
+                            local container_name="$CONTAINER_NAME_FROM_FLAG"
+                            
+                            print_section "Generating container from YAML"
+                            parse_yaml_summary "$yaml_file"
+                            
+                            source "$SCRIPT_DIR/operations/generate.sh"
+                            generate_from_yaml "$yaml_file" "$container_name"
+                            configuration_complete=true
+                        fi
+                    fi
+                elif [[ "$dockerfile_selected" == "true" ]]; then
+                    # Generate from Dockerfile
+                    if get_container_name; then
+                        if show_generation_confirmation; then
+                            handle_dockerfile_generation
+                            configuration_complete=true
+                        fi
+                    fi
+                else
+                    print_error "Please select an image (option 2), YAML file (option 1), or Dockerfile (option 3) first"
+                    sleep 2
+                fi
+                ;;
+            11)  # Cancel
+                print_info "Generation cancelled"
+                return
+                ;;
+            *)
+                print_error "Invalid choice. Please select 1-11."
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# FUNCTION: handle_image_generation
+# =============================================================================
+# Purpose: Handle container generation from existing Docker image
+# Inputs: None (uses global variables IMAGE_NAME, CONTAINER_NAME_FROM_FLAG, etc.)
+# Outputs: None
+# Side Effects: 
+#   - Validates image exists
+#   - Creates container with specified configuration
+# Usage: Called by handle_generate or handle_interactive_generate
+# =============================================================================
+handle_image_generation() {
+    # Validate image exists
+    if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+        print_error "Image '$IMAGE_NAME' does not exist locally"
+        print_info "Available images:"
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+        exit 1
+    fi
+    
+    # Set container name if not provided
+    if [[ -z "$CONTAINER_NAME_FROM_FLAG" ]]; then
+        CONTAINER_NAME_FROM_FLAG=$(generate_container_name_from_image "$IMAGE_NAME")
+    fi
+    
+    print_section "Generating container from image"
+    print_info "Image: $IMAGE_NAME"
+    print_info "Container: $CONTAINER_NAME_FROM_FLAG"
+    
+    # Build docker run command
+    local docker_run_cmd="docker run --name $CONTAINER_NAME_FROM_FLAG"
+    
+    # Add port mapping
+    if [[ -n "$PORT_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -p $PORT_MAPPING"
+    fi
+    
+    # Add volume mapping
+    if [[ -n "$VOLUME_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -v $VOLUME_MAPPING"
+    fi
+    
+    # Add environment variables
+    if [[ -n "$ENV_VARS" ]]; then
+        IFS=',' read -ra env_array <<< "$ENV_VARS"
+        for env_var in "${env_array[@]}"; do
+            docker_run_cmd="$docker_run_cmd -e $env_var"
+        done
+    fi
+    
+    # Add network
+    if [[ -n "$NETWORK_NAME" ]]; then
+        docker_run_cmd="$docker_run_cmd --network $NETWORK_NAME"
+    fi
+    
+    # Add resource limits
+    if [[ -n "$RESOURCE_LIMITS" ]]; then
+        docker_run_cmd="$docker_run_cmd $RESOURCE_LIMITS"
+    fi
+    
+    # Add detach flag
+    docker_run_cmd="$docker_run_cmd -d"
+    
+    # Add image name
+    docker_run_cmd="$docker_run_cmd $IMAGE_NAME"
+    
+    # Execute the command
+    print_info "Executing: $docker_run_cmd"
+    
+    if eval "$docker_run_cmd"; then
+        log_operation_success "generate" "$CONTAINER_NAME_FROM_FLAG" "Container generated successfully from image"
+        print_success "Container '$CONTAINER_NAME_FROM_FLAG' created successfully"
+    else
+        log_operation_failure "generate" "$CONTAINER_NAME_FROM_FLAG" "Failed to create container from image"
+        print_error "Failed to create container from image"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# FUNCTION: handle_dockerfile_generation
+# =============================================================================
+# Purpose: Handle container generation from Dockerfile
+# Inputs: None (uses global variables DOCKERFILE_PATH, BUILD_CONTEXT, etc.)
+# Outputs: None
+# Side Effects: 
+#   - Builds Docker image from Dockerfile
+#   - Creates container with specified configuration
+# Usage: Called by handle_interactive_generate
+# =============================================================================
+handle_dockerfile_generation() {
+    # Validate Dockerfile exists
+    if [[ ! -f "$DOCKERFILE_PATH" ]]; then
+        print_error "Dockerfile '$DOCKERFILE_PATH' does not exist"
+        exit 1
+    fi
+    
+    # Set image name if not provided
+    if [[ -z "$BUILD_IMAGE_NAME" ]]; then
+        local dir_name=$(basename "$BUILD_CONTEXT")
+        if [[ "$dir_name" == "." ]]; then
+            dir_name="app"
+        fi
+        BUILD_IMAGE_NAME="${dir_name}-image:latest"
+    fi
+    
+    # Set container name if not provided
+    if [[ -z "$CONTAINER_NAME_FROM_FLAG" ]]; then
+        CONTAINER_NAME_FROM_FLAG="${BUILD_IMAGE_NAME%:*}-container"
+    fi
+    
+    print_section "Building image from Dockerfile"
+    print_info "Dockerfile: $DOCKERFILE_PATH"
+    print_info "Build context: $BUILD_CONTEXT"
+    print_info "Image name: $BUILD_IMAGE_NAME"
+    print_info "Container: $CONTAINER_NAME_FROM_FLAG"
+    
+    # Build Docker image
+    print_info "Building Docker image..."
+    if ! docker build -f "$DOCKERFILE_PATH" -t "$BUILD_IMAGE_NAME" "$BUILD_CONTEXT"; then
+        print_error "Failed to build Docker image"
+        exit 1
+    fi
+    
+    print_success "Docker image built successfully: $BUILD_IMAGE_NAME"
+    
+    # Now create container from the built image
+    print_section "Creating container from built image"
+    
+    # Build docker run command
+    local docker_run_cmd="docker run --name $CONTAINER_NAME_FROM_FLAG"
+    
+    # Add port mapping
+    if [[ -n "$PORT_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -p $PORT_MAPPING"
+    fi
+    
+    # Add volume mapping
+    if [[ -n "$VOLUME_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -v $VOLUME_MAPPING"
+    fi
+    
+    # Add environment variables
+    if [[ -n "$ENV_VARS" ]]; then
+        IFS=',' read -ra env_array <<< "$ENV_VARS"
+        for env_var in "${env_array[@]}"; do
+            docker_run_cmd="$docker_run_cmd -e $env_var"
+        done
+    fi
+    
+    # Add network
+    if [[ -n "$NETWORK_NAME" ]]; then
+        docker_run_cmd="$docker_run_cmd --network $NETWORK_NAME"
+    fi
+    
+    # Add resource limits
+    if [[ -n "$RESOURCE_LIMITS" ]]; then
+        docker_run_cmd="$docker_run_cmd $RESOURCE_LIMITS"
+    fi
+    
+    # Add detach flag
+    docker_run_cmd="$docker_run_cmd -d"
+    
+    # Add image name
+    docker_run_cmd="$docker_run_cmd $BUILD_IMAGE_NAME"
+    
+    # Execute the command
+    print_info "Executing: $docker_run_cmd"
+    
+    if eval "$docker_run_cmd"; then
+        log_operation_success "generate" "$CONTAINER_NAME_FROM_FLAG" "Container generated successfully from Dockerfile"
+        print_success "Container '$CONTAINER_NAME_FROM_FLAG' created successfully from Dockerfile"
+    else
+        log_operation_failure "generate" "$CONTAINER_NAME_FROM_FLAG" "Failed to create container from Dockerfile"
+        print_error "Failed to create container from Dockerfile"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# FUNCTION: handle_build_only
+# =============================================================================
+# Purpose: Handle build-only operation (no container creation)
+# Inputs: None (uses global variables DOCKERFILE_PATH, BUILD_CONTEXT, etc.)
+# Outputs: None
+# Side Effects: 
+#   - Builds Docker image from Dockerfile
+#   - Does not create or start container
+# Usage: Called by handle_interactive_generate
+# =============================================================================
+handle_build_only() {
+    # Validate Dockerfile exists
+    if [[ ! -f "$DOCKERFILE_PATH" ]]; then
+        print_error "Dockerfile '$DOCKERFILE_PATH' does not exist"
+        exit 1
+    fi
+    
+    # Set image name if not provided
+    if [[ -z "$BUILD_IMAGE_NAME" ]]; then
+        local dir_name=$(basename "$BUILD_CONTEXT")
+        if [[ "$dir_name" == "." ]]; then
+            dir_name="app"
+        fi
+        BUILD_IMAGE_NAME="${dir_name}-image:latest"
+    fi
+    
+    print_section "Building Docker image (no container creation)"
+    print_info "Dockerfile: $DOCKERFILE_PATH"
+    print_info "Build context: $BUILD_CONTEXT"
+    print_info "Image name: $BUILD_IMAGE_NAME"
+    
+    # Build Docker image
+    print_info "Building Docker image..."
+    if ! docker build -f "$DOCKERFILE_PATH" -t "$BUILD_IMAGE_NAME" "$BUILD_CONTEXT"; then
+        print_error "Failed to build Docker image"
+        exit 1
+    fi
+    
+    print_success "Docker image built successfully: $BUILD_IMAGE_NAME"
+    print_info "Image is ready for use. You can run it later with:"
+    print_info "docker run $BUILD_IMAGE_NAME"
+}
+
+# =============================================================================
+# FUNCTION: handle_image_build_only
+# =============================================================================
+# Purpose: Handle image-based build-only operation (no container creation)
+# Inputs: None (uses global variables IMAGE_NAME, CONTAINER_NAME_FROM_FLAG, etc.)
+# Outputs: None
+# Side Effects: 
+#   - Shows docker run command without creating container
+#   - Provides helpful instructions for later use
+# Usage: Called by handle_interactive_generate
+# =============================================================================
+handle_image_build_only() {
+    # Validate image exists
+    if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+        print_error "Image '$IMAGE_NAME' does not exist locally"
+        print_info "Available images:"
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+        exit 1
+    fi
+    
+    # Set container name if not provided
+    if [[ -z "$CONTAINER_NAME_FROM_FLAG" ]]; then
+        CONTAINER_NAME_FROM_FLAG=$(generate_container_name_from_image "$IMAGE_NAME")
+    fi
+    
+    print_section "Build Preview - No Container Creation"
+    print_info "Image: $IMAGE_NAME"
+    print_info "Container: $CONTAINER_NAME_FROM_FLAG"
+    
+    # Build docker run command
+    local docker_run_cmd="docker run --name $CONTAINER_NAME_FROM_FLAG"
+    
+    # Add port mapping
+    if [[ -n "$PORT_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -p $PORT_MAPPING"
+    fi
+    
+    # Add volume mapping
+    if [[ -n "$VOLUME_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -v $VOLUME_MAPPING"
+    fi
+    
+    # Add environment variables
+    if [[ -n "$ENV_VARS" ]]; then
+        docker_run_cmd="$docker_run_cmd -e $ENV_VARS"
+    fi
+    
+    # Add network
+    if [[ -n "$NETWORK_NAME" ]]; then
+        docker_run_cmd="$docker_run_cmd --network $NETWORK_NAME"
+    fi
+    
+    # Add resource limits
+    if [[ -n "$RESOURCE_LIMITS" ]]; then
+        docker_run_cmd="$docker_run_cmd $RESOURCE_LIMITS"
+    fi
+    
+    # Add image and detach flag
+    docker_run_cmd="$docker_run_cmd -d $IMAGE_NAME"
+    
+    print_success "Docker run command preview:"
+    print_cyan "$docker_run_cmd"
+    echo
+    print_info "Container was not created. You can run the command above to create it later."
 }
 
 # =============================================================================

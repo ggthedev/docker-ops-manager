@@ -1372,4 +1372,799 @@ show_generation_step_complete() {
     esac
 }
 
+# =============================================================================
+# INTERACTIVE MENU SYSTEM FOR GENERATE COMMAND
+# =============================================================================
+
+# Display main generate menu
+# Shows the main menu for container generation options
+#
+# Input: None
+# Output: Menu display to stdout
+# Example: show_generate_menu
+show_generate_menu() {
+    clear
+    print_header "Docker Container Generation"
+    echo
+    print_info "Configure your container (select options in any order):"
+    echo
+    echo "1) Select YAML file"
+    echo "2) Select Docker image"
+    echo "3) Build from Dockerfile"
+    echo "4) Configure port mapping"
+    echo "5) Configure volume mounting"
+    echo "6) Configure environment variables"
+    echo "7) Configure custom network"
+    echo "8) Configure resource limits"
+    echo "9) Build only (no run) - Show docker build command"
+    echo "10) Generate container with current configuration"
+    echo "11) Cancel"
+    echo
+    print_info "Enter your choice (1-11): "
+}
+
+# Display YAML generation submenu
+# Shows available YAML files and allows selection
+#
+# Input: None (uses global YAML_FILES array)
+# Output: Updates YAML_FILES global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_yaml_generation_menu
+show_yaml_generation_menu() {
+    clear
+    print_header "Generate from YAML File"
+    echo
+    print_info "Available YAML files in current directory:"
+    echo
+    
+    local yaml_files=($(find . -maxdepth 2 -name "*.yml" -o -name "*.yaml" | head -10))
+    
+    if [[ ${#yaml_files[@]} -eq 0 ]]; then
+        print_warning "No YAML files found in current directory"
+        echo
+        print_info "Please provide a YAML file path:"
+        read -p "YAML file path: " yaml_path
+        if [[ -n "$yaml_path" ]]; then
+            YAML_FILES=("$yaml_path")
+            return 0
+        else
+            return 1
+        fi
+    fi
+    
+    for i in "${!yaml_files[@]}"; do
+        local file="${yaml_files[$i]}"
+        local size=$(du -h "$file" | cut -f1)
+        echo "$((i+1))) $(basename "$file") ($size)"
+    done
+    
+    echo "$(( ${#yaml_files[@]} + 1 ))) Browse other location"
+    echo "$(( ${#yaml_files[@]} + 2 ))) Back to main menu"
+    echo
+    print_info "Select YAML file (1-$(( ${#yaml_files[@]} + 2 ))): "
+    
+    read -r choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -ge 1 ]] && [[ $choice -le ${#yaml_files[@]} ]]; then
+        YAML_FILES=("${yaml_files[$((choice-1))]}")
+        return 0
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -eq $(( ${#yaml_files[@]} + 1 )) ]]; then
+        print_info "Enter YAML file path:"
+        read -p "Path: " yaml_path
+        if [[ -n "$yaml_path" ]]; then
+            YAML_FILES=("$yaml_path")
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# Display Dockerfile build submenu
+# Shows available Dockerfiles and allows selection
+#
+# Input: None (uses global DOCKERFILE_PATH and BUILD_CONTEXT variables)
+# Output: Updates DOCKERFILE_PATH and BUILD_CONTEXT global variables
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_dockerfile_build_menu
+show_dockerfile_build_menu() {
+    clear
+    print_header "Build from Dockerfile"
+    echo
+    print_info "Available Dockerfiles in current directory:"
+    echo
+    
+    local dockerfiles=($(find . -maxdepth 3 -name "*Dockerfile*" | head -10))
+    
+    if [[ ${#dockerfiles[@]} -eq 0 ]]; then
+        print_warning "No Dockerfile found in current directory"
+        echo
+        print_info "Please provide a Dockerfile path:"
+        read -p "Dockerfile path: " dockerfile_path
+        if [[ -n "$dockerfile_path" ]]; then
+            DOCKERFILE_PATH="$dockerfile_path"
+            BUILD_CONTEXT="."
+            return 0
+        else
+            return 1
+        fi
+    fi
+    
+    for i in "${!dockerfiles[@]}"; do
+        local dockerfile="${dockerfiles[$i]}"
+        local dir=$(dirname "$dockerfile")
+        echo "$((i+1))) $dockerfile (context: $dir)"
+    done
+    
+    echo "$(( ${#dockerfiles[@]} + 1 ))) Browse other location"
+    echo "$(( ${#dockerfiles[@]} + 2 ))) Back to main menu"
+    echo
+    print_info "Select Dockerfile (1-$(( ${#dockerfiles[@]} + 2 ))): "
+    
+    read -r choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -ge 1 ]] && [[ $choice -le ${#dockerfiles[@]} ]]; then
+        DOCKERFILE_PATH="${dockerfiles[$((choice-1))]}"
+        BUILD_CONTEXT=$(dirname "${dockerfiles[$((choice-1))]}")
+        return 0
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -eq $(( ${#dockerfiles[@]} + 1 )) ]]; then
+        print_info "Enter Dockerfile path:"
+        read -p "Path: " dockerfile_path
+        if [[ -n "$dockerfile_path" ]]; then
+            DOCKERFILE_PATH="$dockerfile_path"
+            print_info "Enter build context directory (default: current directory):"
+            read -p "Context: " build_context
+            BUILD_CONTEXT="${build_context:-.}"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# Display image generation submenu
+# Shows available Docker images and allows selection
+#
+# Input: None (uses global IMAGE_NAME variable)
+# Output: Updates IMAGE_NAME global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_image_generation_menu
+show_image_generation_menu() {
+    clear
+    print_header "Generate from Docker Image"
+    echo
+    print_info "Available local images:"
+    echo
+    
+    local images=($(docker images --format "{{.Repository}}:{{.Tag}}" | grep -v "<none>" | head -10))
+    
+    if [[ ${#images[@]} -eq 0 ]]; then
+        print_warning "No local images found"
+        echo
+        print_info "Please provide an image name:"
+        read -p "Image name: " image_name
+        if [[ -n "$image_name" ]]; then
+            IMAGE_NAME="$image_name"
+            return 0
+        else
+            return 1
+        fi
+    fi
+    
+    for i in "${!images[@]}"; do
+        local image="${images[$i]}"
+        echo "$((i+1))) $image"
+    done
+    
+    echo "$(( ${#images[@]} + 1 ))) Enter custom image name"
+    echo "$(( ${#images[@]} + 2 ))) Back to main menu"
+    echo
+    print_info "Select image (1-$(( ${#images[@]} + 2 ))): "
+    
+    read -r choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -ge 1 ]] && [[ $choice -le ${#images[@]} ]]; then
+        IMAGE_NAME="${images[$((choice-1))]}"
+        return 0
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -eq $(( ${#images[@]} + 1 )) ]]; then
+        print_info "Enter image name:"
+        read -p "Image: " image_name
+        if [[ -n "$image_name" ]]; then
+            IMAGE_NAME="$image_name"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# Display port mapping submenu
+# Allows selection of common port mappings or custom input
+#
+# Input: None (uses global PORT_MAPPING variable)
+# Output: Updates PORT_MAPPING global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_port_mapping_menu
+show_port_mapping_menu() {
+    clear
+    print_header "Configure Port Mapping"
+    echo
+    print_info "Common port mappings:"
+    echo
+    echo "1) Web server (80:80)"
+    echo "2) HTTPS (443:443)"
+    echo "3) Database (3306:3306)"
+    echo "4) Monitoring (8080:8080)"
+    echo "5) Custom port mapping"
+    echo "6) No port mapping"
+    echo
+    print_info "Select option (1-6): "
+    
+    read -r choice
+    case "$choice" in
+        1) PORT_MAPPING="80:80" ;;
+        2) PORT_MAPPING="443:443" ;;
+        3) PORT_MAPPING="3306:3306" ;;
+        4) PORT_MAPPING="8080:8080" ;;
+        5)
+            print_info "Enter custom port mapping (host:container):"
+            read -p "Port mapping: " PORT_MAPPING
+            ;;
+        6) PORT_MAPPING="" ;;
+        *) return 1 ;;
+    esac
+    
+    return 0
+}
+
+# Display volume mapping submenu
+# Allows configuration of volume mappings
+#
+# Input: None (uses global VOLUME_MAPPING variable)
+# Output: Updates VOLUME_MAPPING global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_volume_mapping_menu
+show_volume_mapping_menu() {
+    clear
+    print_header "Configure Volume Mapping"
+    echo
+    print_info "Volume mapping options:"
+    echo
+    echo "1) No volume mapping"
+    echo "2) Custom volume mapping"
+    echo "3) Back to main menu"
+    echo
+    print_info "Select option (1-3): "
+    
+    read -r choice
+    case "$choice" in
+        1) VOLUME_MAPPING="" ;;
+        2)
+            print_info "Enter volume mapping (host_path:container_path):"
+            read -p "Volume mapping: " volume_input
+            
+            if [[ -n "$volume_input" ]]; then
+                # Extract host path for validation
+                local host_path=$(echo "$volume_input" | cut -d':' -f1)
+                
+                if validate_volume_path "$host_path"; then
+                    VOLUME_MAPPING="$volume_input"
+                else
+                    print_info "Volume mapping not set due to validation error"
+                fi
+            fi
+            ;;
+        3) return 1 ;;
+        *) return 1 ;;
+    esac
+    
+    return 0
+}
+
+# Display environment variables submenu
+# Allows configuration of environment variables
+#
+# Input: None (uses global ENV_VARS variable)
+# Output: Updates ENV_VARS global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_environment_menu
+show_environment_menu() {
+    clear
+    print_header "Configure Environment Variables"
+    echo
+    print_info "Environment variable options:"
+    echo
+    echo "1) No environment variables"
+    echo "2) Custom environment variables"
+    echo "3) Back to main menu"
+    echo
+    print_info "Select option (1-3): "
+    
+    read -r choice
+    case "$choice" in
+        1) ENV_VARS="" ;;
+        2)
+            print_info "Enter environment variables (KEY=value,KEY2=value2):"
+            read -p "Environment variables: " ENV_VARS
+            ;;
+        3) return 1 ;;
+        *) return 1 ;;
+    esac
+    
+    return 0
+}
+
+# Display network submenu
+# Shows available networks and allows selection
+#
+# Input: None (uses global NETWORK_NAME variable)
+# Output: Updates NETWORK_NAME global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_network_menu
+show_network_menu() {
+    clear
+    print_header "Configure Network"
+    echo
+    print_info "Available networks:"
+    echo
+    
+    local networks=($(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none"))
+    
+    if [[ ${#networks[@]} -eq 0 ]]; then
+        print_warning "No custom networks found"
+        echo
+        echo "1) Use default bridge network"
+        echo "2) Create new network"
+        echo "3) Back to main menu"
+        echo
+        print_info "Select option (1-3): "
+        
+        read -r choice
+        case "$choice" in
+            1) NETWORK_NAME="" ;;
+            2)
+                print_info "Enter network name:"
+                read -p "Network name: " NETWORK_NAME
+                ;;
+            3) return 1 ;;
+            *) return 1 ;;
+        esac
+    else
+        echo "1) Use default bridge network"
+        for i in "${!networks[@]}"; do
+            local network="${networks[$i]}"
+            echo "$((i+2))) $network"
+        done
+        echo "$(( ${#networks[@]} + 2 ))) Create new network"
+        echo "$(( ${#networks[@]} + 3 ))) Back to main menu"
+        echo
+        print_info "Select network (1-$(( ${#networks[@]} + 3 ))): "
+        
+        read -r choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -eq 1 ]]; then
+            NETWORK_NAME=""
+        elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -ge 2 ]] && [[ $choice -le $(( ${#networks[@]} + 1 )) ]]; then
+            NETWORK_NAME="${networks[$((choice-2))]}"
+        elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -eq $(( ${#networks[@]} + 2 )) ]]; then
+            print_info "Enter network name:"
+            read -p "Network name: " NETWORK_NAME
+        else
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+# Display resource limits submenu
+# Allows configuration of memory and CPU limits
+#
+# Input: None (uses global RESOURCE_LIMITS variable)
+# Output: Updates RESOURCE_LIMITS global variable
+# Return code: 0 if selection made, 1 if cancelled
+# Example: show_resource_menu
+show_resource_menu() {
+    clear
+    print_header "Configure Resource Limits"
+    echo
+    print_info "Resource limit options:"
+    echo
+    echo "1) No resource limits"
+    echo "2) Memory limit only"
+    echo "3) CPU limit only"
+    echo "4) Both memory and CPU limits"
+    echo "5) Back to main menu"
+    echo
+    print_info "Select option (1-5): "
+    
+    read -r choice
+    case "$choice" in
+        1) RESOURCE_LIMITS="" ;;
+        2)
+            print_info "Enter memory limit (e.g., 512m, 1g):"
+            read -p "Memory limit: " memory_limit
+            if [[ -n "$memory_limit" ]]; then
+                RESOURCE_LIMITS="--memory $memory_limit"
+            fi
+            ;;
+        3)
+            print_info "Enter CPU limit (e.g., 0.5, 1.0):"
+            read -p "CPU limit: " cpu_limit
+            if [[ -n "$cpu_limit" ]]; then
+                RESOURCE_LIMITS="--cpus $cpu_limit"
+            fi
+            ;;
+        4)
+            print_info "Enter memory limit (e.g., 512m, 1g):"
+            read -p "Memory limit: " memory_limit
+            print_info "Enter CPU limit (e.g., 0.5, 1.0):"
+            read -p "CPU limit: " cpu_limit
+            if [[ -n "$memory_limit" ]] && [[ -n "$cpu_limit" ]]; then
+                RESOURCE_LIMITS="--memory $memory_limit --cpus $cpu_limit"
+            fi
+            ;;
+        5) return 1 ;;
+        *) return 1 ;;
+    esac
+    
+    return 0
+}
+
+# Get container name from user input
+# Prompts for container name or auto-generates one
+#
+# Input: None (uses global CONTAINER_NAME_FROM_FLAG variable)
+# Output: Updates CONTAINER_NAME_FROM_FLAG global variable
+# Return code: 0 if name set, 1 if cancelled
+# Example: get_container_name
+get_container_name() {
+    clear
+    print_header "Container Name"
+    echo
+    print_info "Enter container name (or press Enter for auto-generated name):"
+    read -p "Container name: " container_name
+    
+    if [[ -n "$container_name" ]]; then
+        CONTAINER_NAME_FROM_FLAG="$container_name"
+    else
+        # Auto-generate name based on image or YAML
+        if [[ -n "$IMAGE_NAME" ]]; then
+            CONTAINER_NAME_FROM_FLAG=$(generate_container_name_from_image "$IMAGE_NAME")
+        else
+            CONTAINER_NAME_FROM_FLAG="container-$(date +%Y%m%d_%H%M%S)"
+        fi
+        print_info "Auto-generated name: $CONTAINER_NAME_FROM_FLAG"
+    fi
+    
+    return 0
+}
+
+# Build docker build command preview
+# Constructs the docker build command based on selected options
+#
+# Input: None (uses global configuration variables)
+# Output: Docker build command string
+# Example: build_docker_build_preview
+build_docker_build_preview() {
+    local docker_build_cmd="docker build"
+    
+    # Add Dockerfile path if specified
+    if [[ -n "$DOCKERFILE_PATH" ]]; then
+        docker_build_cmd="$docker_build_cmd -f $DOCKERFILE_PATH"
+    fi
+    
+    # Add image name
+    if [[ -n "$BUILD_IMAGE_NAME" ]]; then
+        docker_build_cmd="$docker_build_cmd -t $BUILD_IMAGE_NAME"
+    else
+        # Generate default image name
+        local dir_name=$(basename "$BUILD_CONTEXT")
+        if [[ "$dir_name" == "." ]]; then
+            dir_name="app"
+        fi
+        docker_build_cmd="$docker_build_cmd -t ${dir_name}-image:latest"
+    fi
+    
+    # Add build context
+    docker_build_cmd="$docker_build_cmd $BUILD_CONTEXT"
+    
+    echo "$docker_build_cmd"
+}
+
+# Build docker run command preview
+# Constructs the docker run command based on all selected options
+#
+# Input: None (uses global configuration variables)
+# Output: Docker run command string
+# Example: build_docker_run_preview
+build_docker_run_preview() {
+    local docker_run_cmd="docker run"
+    
+    # Add container name
+    docker_run_cmd="$docker_run_cmd --name $CONTAINER_NAME_FROM_FLAG"
+    
+    # Add port mapping
+    if [[ -n "$PORT_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -p $PORT_MAPPING"
+    fi
+    
+    # Add volume mapping
+    if [[ -n "$VOLUME_MAPPING" ]]; then
+        docker_run_cmd="$docker_run_cmd -v $VOLUME_MAPPING"
+    fi
+    
+    # Add environment variables
+    if [[ -n "$ENV_VARS" ]]; then
+        # Split multiple env vars and add each one
+        IFS=',' read -ra env_array <<< "$ENV_VARS"
+        for env_var in "${env_array[@]}"; do
+            docker_run_cmd="$docker_run_cmd -e $env_var"
+        done
+    fi
+    
+    # Add network
+    if [[ -n "$NETWORK_NAME" ]]; then
+        docker_run_cmd="$docker_run_cmd --network $NETWORK_NAME"
+    fi
+    
+    # Add resource limits
+    if [[ -n "$RESOURCE_LIMITS" ]]; then
+        docker_run_cmd="$docker_run_cmd $RESOURCE_LIMITS"
+    fi
+    
+    # Add detach flag
+    docker_run_cmd="$docker_run_cmd -d"
+    
+    # Add image name
+    if [[ -n "$BUILD_IMAGE_NAME" ]]; then
+        docker_run_cmd="$docker_run_cmd $BUILD_IMAGE_NAME"
+    else
+        docker_run_cmd="$docker_run_cmd $IMAGE_NAME"
+    fi
+    
+    echo "$docker_run_cmd"
+}
+
+# Validate volume path for Docker on macOS
+# Checks if the volume path is accessible to Docker
+#
+# Input: $1 - volume path (e.g., "/Users/username/path")
+# Output: None
+# Return code: 0 if valid, 1 if invalid
+# Example: validate_volume_path "/Users/username/myapp"
+validate_volume_path() {
+    local volume_path="$1"
+    
+    # Check if path exists
+    if [[ ! -e "$volume_path" ]]; then
+        print_error "Volume path does not exist: $volume_path"
+        return 1
+    fi
+    
+    # On macOS, check if path is in Docker's shared directories
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Common Docker shared paths on macOS
+        local shared_paths=(
+            "/Users"
+            "/tmp"
+            "/var/folders"
+            "/private"
+        )
+        
+        local is_shared=false
+        for shared_path in "${shared_paths[@]}"; do
+            if [[ "$volume_path" == "$shared_path"* ]]; then
+                is_shared=true
+                break
+            fi
+        done
+        
+        if [[ "$is_shared" == "false" ]]; then
+            print_warning "Volume path may not be shared with Docker on macOS: $volume_path"
+            print_info "To fix this:"
+            print_info "1. Open Docker Desktop"
+            print_info "2. Go to Settings -> Resources -> File Sharing"
+            print_info "3. Add the directory containing: $(dirname "$volume_path")"
+            print_info "4. Restart Docker Desktop"
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+# Generate container name from image name
+# Creates a container name based on the image name
+#
+# Input: $1 - image name (e.g., "nginx:latest")
+# Output: Container name (e.g., "nginx-container")
+# Example: generate_container_name_from_image "nginx:latest"
+generate_container_name_from_image() {
+    local image_name="$1"
+    
+    # Extract repository name (remove tag)
+    local repo_name=$(echo "$image_name" | cut -d':' -f1)
+    
+    # Remove any registry prefix
+    repo_name=$(echo "$repo_name" | sed 's/.*\///')
+    
+    # Add timestamp to make it unique
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    
+    echo "${repo_name}-container-${timestamp}"
+}
+
+# Display build-only confirmation with preview
+# Shows configuration summary and docker build command preview
+#
+# Input: None (uses global configuration variables)
+# Output: Confirmation prompt
+# Return code: 0 if confirmed, 1 if cancelled
+# Example: show_build_confirmation
+show_build_confirmation() {
+    clear
+    print_header "Build Only - No Container Creation"
+    echo
+    print_info "Selected Configuration:"
+    echo
+    
+    # Show source (Dockerfile only for build)
+    if [[ -n "$DOCKERFILE_PATH" ]]; then
+        echo "🔨 Source: Dockerfile"
+        echo "   Dockerfile: $DOCKERFILE_PATH"
+        echo "   Build context: $BUILD_CONTEXT"
+        echo "   Image name: $BUILD_IMAGE_NAME"
+    else
+        echo "❌ No Dockerfile selected for building"
+        return 1
+    fi
+    
+    echo
+    echo "🚫 Mode: Build only (no container creation)"
+    
+    echo
+    print_info "Docker build command that will be executed:"
+    echo
+    local preview_cmd=$(build_docker_build_preview)
+    print_cyan "$preview_cmd"
+    echo
+    print_info "Proceed with build only? (y/N): "
+    read -r confirm
+    
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Show image build confirmation (for existing images)
+# Displays confirmation screen for image-based build-only operations
+#
+# Input: None (uses global variables)
+# Output: None
+# Return code: 0 if confirmed, 1 if cancelled
+# Example: show_image_build_confirmation
+show_image_build_confirmation() {
+    clear
+    print_header "Build Only - No Container Creation"
+    echo
+    print_info "Selected Configuration:"
+    echo
+    
+    # Show source (existing image)
+    if [[ -n "$IMAGE_NAME" ]]; then
+        echo "📦 Source: Existing Docker Image"
+        echo "   Image: $IMAGE_NAME"
+    else
+        echo "❌ No image selected for building"
+        return 1
+    fi
+    
+    echo
+    echo "🚫 Mode: Build only (no container creation)"
+    echo
+    print_info "Docker run command that would be executed:"
+    echo
+    # Set container name if not provided for preview
+    if [[ -z "$CONTAINER_NAME_FROM_FLAG" ]]; then
+        CONTAINER_NAME_FROM_FLAG=$(generate_container_name_from_image "$IMAGE_NAME")
+    fi
+    local preview_cmd=$(build_docker_run_preview)
+    print_cyan "$preview_cmd"
+    echo
+    print_info "Note: This will show the docker run command without creating a container"
+    echo
+    print_info "Proceed with build preview only? (y/N): "
+    read -r confirm
+    
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Display final confirmation with preview
+# Shows configuration summary and docker command preview
+#
+# Input: None (uses global configuration variables)
+# Output: Confirmation prompt
+# Return code: 0 if confirmed, 1 if cancelled
+# Example: show_generation_confirmation
+show_generation_confirmation() {
+    clear
+    print_header "Generation Summary"
+    echo
+    print_info "Selected Configuration:"
+    echo
+    
+    # Show source (image, YAML, or Dockerfile)
+    if [[ -n "$IMAGE_NAME" ]]; then
+        echo "📦 Source: Docker Image"
+        echo "   Image: $IMAGE_NAME"
+    elif [[ -n "$DOCKERFILE_PATH" ]]; then
+        echo "🔨 Source: Dockerfile"
+        echo "   Dockerfile: $DOCKERFILE_PATH"
+        echo "   Build context: $BUILD_CONTEXT"
+        echo "   Image name: $BUILD_IMAGE_NAME"
+    elif [[ ${#YAML_FILES[@]} -gt 0 ]]; then
+        echo "📄 Source: YAML File"
+        echo "   File: ${YAML_FILES[0]}"
+    fi
+    
+    echo
+    echo "🏷️  Container: $CONTAINER_NAME_FROM_FLAG"
+    
+    # Show all configured options
+    local has_config=false
+    
+    if [[ -n "$PORT_MAPPING" ]]; then
+        echo "🔌 Port Mapping: $PORT_MAPPING"
+        has_config=true
+    fi
+    
+    if [[ -n "$VOLUME_MAPPING" ]]; then
+        echo "💾 Volume Mapping: $VOLUME_MAPPING"
+        has_config=true
+    fi
+    
+    if [[ -n "$ENV_VARS" ]]; then
+        echo "🔧 Environment Variables: $ENV_VARS"
+        has_config=true
+    fi
+    
+    if [[ -n "$NETWORK_NAME" ]]; then
+        echo "🌐 Network: $NETWORK_NAME"
+        has_config=true
+    fi
+    
+    if [[ -n "$RESOURCE_LIMITS" ]]; then
+        echo "⚡ Resource Limits: $RESOURCE_LIMITS"
+        has_config=true
+    fi
+    
+    if [[ "$has_config" == "false" ]]; then
+        echo "📝 No additional configuration options set"
+    fi
+    
+    if [[ "$NO_START" == "true" ]]; then
+        echo "🚫 Mode: Create only (not started)"
+    else
+        echo "▶️  Mode: Create and start"
+    fi
+    
+    echo
+    print_info "Docker command that will be executed:"
+    echo
+    local preview_cmd=$(build_docker_run_preview)
+    print_cyan "$preview_cmd"
+    echo
+    print_info "Proceed with generation? (y/N): "
+    read -r confirm
+    
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
  

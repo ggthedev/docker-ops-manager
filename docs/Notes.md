@@ -251,4 +251,234 @@ The issue was caused by race conditions in the animation system:
 - Consider implementing a more robust animation system with better state management
 - Add animation debugging capabilities for troubleshooting similar issues
 - Consider using a dedicated terminal library for complex animations
-- Implement animation queuing to prevent overlapping animations 
+- Implement animation queuing to prevent overlapping animations
+
+---
+
+# Interactive Menu System for Generate Command
+
+## Problem Statement
+The generate command was limited to only working with YAML files, requiring users to have pre-existing YAML configurations. Users wanted the ability to:
+1. Generate containers directly from existing Docker images
+2. Use an interactive menu system for easier configuration
+3. Preview docker run commands before execution
+4. Configure various container options (ports, volumes, environment variables, etc.)
+
+## Solution Approach
+
+### 1. Interactive Menu System
+Implemented a comprehensive menu-driven interface that guides users through container generation:
+
+**Main Menu Options:**
+- Select YAML file
+- Select Docker image
+- Build from Dockerfile
+- Configure port mapping
+- Configure volume mounting
+- Configure environment variables
+- Configure custom network
+- Configure resource limits
+- Build only (no run) - Show docker build command
+- Generate container with current configuration
+- Cancel
+
+**Key Features:**
+- **Multi-step Configuration**: Users can configure multiple options in any order
+- **Clean Menu Interface**: Simple, uncluttered menu without real-time status display
+- **Flexible Workflow**: Configure options first, then generate when ready
+- **Final Summary**: Shows all selected parameters at the final build stage
+
+### 2. Command-Line Interface Enhancement
+Added new command-line flags to support direct image generation:
+- `--image IMAGE_NAME`: Specify Docker image to use
+- `--container-name NAME`: Specify container name
+
+### 3. Configuration Options
+Each submenu provides specific configuration options:
+
+**Port Mapping Menu:**
+- Web server (80:80)
+- HTTPS (443:443)
+- Database (3306:3306)
+- Monitoring (8080:8080)
+- Custom port mapping
+- No port mapping
+
+**Volume Mapping Menu:**
+- No volume mapping
+- Custom volume mapping
+
+**Environment Variables Menu:**
+- No environment variables
+- Custom environment variables (KEY=value,KEY2=value2)
+
+**Network Menu:**
+- Use default bridge network
+- Select from existing custom networks
+- Create new network
+
+**Resource Limits Menu:**
+- No resource limits
+- Memory limit only
+- CPU limit only
+- Both memory and CPU limits
+
+### 4. Docker Command Preview
+Implemented a preview system that shows the exact `docker run` command that will be executed:
+
+```bash
+docker run --name my-container -p 80:80 -v /host/path:/container/path -e KEY=value --network my-network --memory 512m --cpus 0.5 -d nginx:latest
+```
+
+### 5. Build-Only Mode
+Added option to build Docker images without creating containers (emulates `--no-start` for both Dockerfile builds and existing images):
+
+**Features:**
+- **Dockerfile Build**: Shows `docker build` command preview and builds image without container creation
+- **Image Preview**: Shows `docker run` command preview for existing images without container creation
+- Provides helpful instructions for running the built/previewed image later
+- Validates Dockerfile existence and build context
+- Validates existing image availability
+
+**Examples:**
+```bash
+# Dockerfile Build-Only:
+# Select option 3 (Build from Dockerfile)
+# Select option 9 (Build only - no run)
+# Shows: docker build -f ./Dockerfile -t app-image:latest .
+# Builds image and provides: docker run app-image:latest
+
+# Image Preview-Only:
+# Select option 2 (Select Docker image)
+# Select option 9 (Build only - no run)
+# Shows: docker run --name my-container -p 80:80 -d nginx:latest
+# Provides command without creating container
+```
+
+## Implementation Details
+
+### New Functions Added
+
+1. **Menu System Functions** (in `lib/utils.sh`):
+   - `show_generate_menu()`: Main menu display
+   - `show_yaml_generation_menu()`: YAML file selection
+   - `show_image_generation_menu()`: Docker image selection
+   - `show_dockerfile_build_menu()`: Dockerfile selection
+   - `show_port_mapping_menu()`: Port configuration
+   - `show_volume_mapping_menu()`: Volume configuration
+   - `show_environment_menu()`: Environment variables
+   - `show_network_menu()`: Network configuration
+   - `show_resource_menu()`: Resource limits
+   - `get_container_name()`: Container name input
+   - `build_docker_run_preview()`: Command preview generation
+   - `build_docker_build_preview()`: Build command preview generation
+   - `show_generation_confirmation()`: Final confirmation with preview
+   - `show_build_confirmation()`: Dockerfile build-only confirmation with preview
+   - `show_image_build_confirmation()`: Image build-only confirmation with preview
+
+2. **Handler Functions** (in `docker-manager.sh`):
+   - `handle_interactive_generate()`: Main interactive menu handler
+   - `handle_image_generation()`: Image-based container generation
+   - `handle_dockerfile_generation()`: Dockerfile-based container generation
+   - `handle_build_only()`: Dockerfile build-only operation (no container creation)
+   - `handle_image_build_only()`: Image build-only operation (no container creation)
+
+3. **Helper Functions**:
+   - `generate_container_name_from_image()`: Auto-generate container names
+
+### Global Variables Added
+```bash
+IMAGE_NAME=""
+CONTAINER_NAME_FROM_FLAG=""
+PORT_MAPPING=""
+VOLUME_MAPPING=""
+ENV_VARS=""
+NETWORK_NAME=""
+RESOURCE_LIMITS=""
+DOCKERFILE_PATH=""
+BUILD_CONTEXT=""
+BUILD_IMAGE_NAME=""
+```
+
+### Argument Parsing Updates
+Added support for new command-line flags:
+- `--image`: Specifies Docker image
+- `--container-name`: Specifies container name
+
+## Usage Examples
+
+### Interactive Menu
+```bash
+./docker-manager.sh generate
+./docker-manager.sh -g
+```
+
+**Multi-step Configuration Example:**
+1. Select option 2 (Select Docker image)
+2. Select option 4 (Configure port mapping) → Choose 80:80
+3. Select option 5 (Configure volume mounting) → Set /tmp:/data
+4. Select option 10 (Generate container with current configuration)
+5. Enter container name and confirm
+
+**Result**: Container generated with image, port mapping, and volume mounting
+
+**Build-Only Examples:**
+1. **Dockerfile Build**: Select option 3 (Build from Dockerfile) → Select option 9 (Build only - no run) → Confirm build
+2. **Image Preview**: Select option 2 (Select Docker image) → Select option 9 (Build only - no run) → Confirm preview
+
+**Results**: 
+- Dockerfile: Image built without container creation
+- Existing Image: Command preview shown without container creation
+
+### Command-Line Usage
+```bash
+# Generate from existing image
+./docker-manager.sh generate --image nginx:latest
+./docker-manager.sh generate --image nginx:latest --container-name my-nginx
+
+# Generate from YAML (existing functionality preserved)
+./docker-manager.sh generate docker-compose.yml
+./docker-manager.sh -g docker-compose.yml
+```
+
+## Testing Results
+
+### Interactive Menu
+- ✅ Main menu displays correctly (clean interface)
+- ✅ All submenus work as expected
+- ✅ Multi-step configuration works (configure options, then generate)
+- ✅ Final summary shows all selected parameters clearly
+- ✅ Option 8 (Generate container) is now functional
+- ✅ User input validation works
+- ✅ Configuration options are properly stored
+
+### Command-Line Interface
+- ✅ `--image` flag works correctly
+- ✅ `--container-name` flag works correctly
+- ✅ Image validation works (shows available images if image doesn't exist)
+- ✅ Container generation from image works
+- ✅ Existing YAML functionality preserved
+
+### Preview System
+- ✅ Docker run command preview shows correctly
+- ✅ All configuration options are included in preview
+- ✅ Confirmation prompt works
+
+## Benefits
+
+1. **User-Friendly**: Interactive menu makes container generation accessible to all users
+2. **Flexible**: Supports both YAML and direct image generation with multi-step configuration
+3. **Transparent**: Shows exact docker run command before execution
+4. **Comprehensive**: Covers all major container configuration options
+5. **Backward Compatible**: Existing YAML functionality unchanged
+6. **Extensible**: Easy to add new configuration options
+7. **Clean Interface**: Simple, uncluttered menu without distracting status displays
+8. **Final Summary**: Clear display of all selected parameters at build time
+
+## Future Enhancements
+
+1. **Advanced Configuration**: Add more complex configuration options
+2. **Template System**: Save and reuse common configurations
+3. **Validation**: Enhanced input validation for all options
+4. **Multi-Container**: Support for generating multiple containers at once
+5. **Import/Export**: Save and load configuration profiles 
